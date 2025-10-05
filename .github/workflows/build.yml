@@ -27,11 +27,11 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install pyinstaller # Install PyInstaller
+        pip install flake8
 
     - name: Build executable with PyInstaller
       run: |
-        # Replace 'your_main_script.py' with the path to your main Python script
-        pyinstaller --onefile --name "YourAppName" your_main_script.py
+        pyinstller Producers-Toolkit_refactor_v0.17.6.spec
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
