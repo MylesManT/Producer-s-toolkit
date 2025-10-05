@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['Producers-Toolkit_refactor_v0.17.6.py'],
+    ['Producers-Toolkit'],
     pathex=[],
     binaries=[],
     datas=[],
