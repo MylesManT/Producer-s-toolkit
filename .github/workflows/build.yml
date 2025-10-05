@@ -31,7 +31,7 @@ jobs:
 
       - name: Build executable with PyInstaller
         run: |
-          pyinstaller your_script.spec
+          pyinstaller Producers-Toolkit.spec
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
