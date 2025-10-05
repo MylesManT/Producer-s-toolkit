@@ -51,8 +51,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install flake8
-        pip install -r requirements.txt
+        pip install -r /requirements.txt
         pyinstaller Producers-Toolkit.spec
     - name: 'Zip files'
       uses: thedoctor0/zip-release@0.7.5
