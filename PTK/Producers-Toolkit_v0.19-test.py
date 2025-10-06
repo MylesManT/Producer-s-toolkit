@@ -208,7 +208,7 @@ class ProducersToolkit(QMainWindow):
         timing_layout.addWidget(self.start_time_input)
 
         # Include moves & lunch toggle
-        self.include_moves_lunch_toggle = QCheckBox("Include moves & lunch in totals?")
+        self.include_moves_lunch_toggle = QCheckBox("Include moves && lunch in totals?")
         self.include_moves_lunch_toggle.setFont(label_font)
         self.include_moves_lunch_toggle.setChecked(True)
         timing_layout.addWidget(self.include_moves_lunch_toggle)
