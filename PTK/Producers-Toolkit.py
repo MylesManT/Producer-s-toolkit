@@ -1,448 +1,674 @@
 # ------------------------------------------------------------
-# PRODUCER'S TOOLKIT - Version v0.17-pre
+# ProducersToolkit_v0_19_test.py
 # ------------------------------------------------------------
-# Single-file application (PyQt6) with heavy inline comments.
+# v0.19-test
 #
-# Notable:
-#   - Adds "Minutes per Setup" spinbox (1..30 minutes, default 5)
-#   - All setup-time math uses self.lx_setup_minutes
-#   - Changing Minutes-per-Setup auto-recalculates (no fade)
-#   - Recalculate button still triggers fade + recalc as before
-#   - "Use and Lock Default Number of Setups (INT=3, EXT=5)" locks combos (visible but disabled)
-#   - Global Controls Bar uses pale gray background (#f2f2f2)
-#   - All code heavily commented, spaced for readability
+# - Builds on v0.18.4-pre features (badges, compact cards, persistent settings saved on export,
+#   last-recalculated, recalc/export fixes, Preview modal).
+# - Preview modal now auto-loads a real PDF preview using QtPDF (QPdfDocument + QPdfView)
+#   if PyQt6.QtPdf / PyQt6.QtPdfWidgets are available.
+# - Falls back to the previous HTML/text-based PDF preview if QtPDF is not available.
+# - Single-file PyQt6 application, heavily commented for clarity.
 # ------------------------------------------------------------
 
-# --- standard library imports ---
-import sys                                     # system-level functions (argv, exit)
-import os                                      # file path helpers for export naming
-import re                                      # regular expressions for parsing text
-import csv                                     # CSV export support
-from datetime import timedelta, datetime      # time arithmetic and formatting
+# ------------------------
+# Standard library imports
+# ------------------------
+import sys                                   # system argv and exit
+import os                                    # file path handling
+import json                                  # settings persistence
+import re                                    # simple fountain parsing
+import csv                                   # CSV export
+import tempfile                              # temporary files for preview
+from datetime import timedelta, datetime    # time arithmetic and formatting
 
-# --- PyQt6 imports ---
-from PyQt6.QtWidgets import (                   # GUI widget classes
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QTableWidget, QTableWidgetItem, QComboBox, QLabel,
-    QSpinBox, QCheckBox, QMessageBox, QFileDialog, QGraphicsOpacityEffect
+# ------------------------
+# PyQt6 imports (widgets, core, gui)
+# ------------------------
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+    QTableWidget, QTableWidgetItem, QComboBox, QLabel, QSpinBox, QCheckBox,
+    QMessageBox, QFileDialog, QGraphicsOpacityEffect, QGraphicsDropShadowEffect,
+    QFrame, QDialog, QTabWidget, QTextBrowser
 )
-from PyQt6.QtCore import Qt, QPropertyAnimation  # alignment constants and animations
-from PyQt6.QtGui import QBrush, QColor, QFont     # styling helpers for table cells
+from PyQt6.QtCore import Qt, QPropertyAnimation
+from PyQt6.QtGui import QBrush, QColor, QFont
 
-# --- ReportLab imports for PDF export ---
+# ------------------------
+# Optional QtPDF imports
+# ------------------------
+# We try to import QPdfDocument and QPdfView; if unavailable, set a flag and fallback to HTML preview.
+try:
+    from PyQt6.QtPdf import QPdfDocument
+    from PyQt6.QtPdfWidgets import QPdfView
+    QT_PDF_AVAILABLE = True
+except Exception:
+    # QtPDF modules not available in this environment
+    QT_PDF_AVAILABLE = False
+
+# ------------------------
+# ReportLab imports for PDF export generation
+# ------------------------
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-# ------------------------------------------------------------
-# Default and UI constants
-# ------------------------------------------------------------
-DEFAULTS = {                                    # configuration defaults
-    "words_per_page": 150,                      # default words per script page (WPP)
-    "lx_setup_minutes": 5,                      # default minutes added per setup
-    "setups_int": 3,                            # default setups for INT scenes
-    "setups_ext": 5,                            # default setups for EXT scenes
-    "default_move_duration": 10,                # minutes per company move
-    "default_lunch_duration": 60,               # default lunch length minutes
-    "default_start_time": "08:00"               # default shoot start time (24h)
+# ------------------------
+# Defaults and UI constants
+# ------------------------
+DEFAULTS = {
+    "words_per_page": 150,
+    "setup_minutes": 5,
+    "setups_int": 3,
+    "setups_ext": 5,
+    "default_move_duration": 10,
+    "default_lunch_duration": 60,
+    "default_start_time": "08:00"
 }
 
-# fade animation duration (milliseconds) used for recalc button UX
-FADE_DURATION_MS = 500
-
-# pale gray color for the global controls bar background
-GLOBAL_BAR_COLOR = "#f2f2f2"
+FADE_DURATION_MS = 500              # per-row fade animation duration (ms)
+CARD_BG = "#f8f9fb"                 # card background color
+CARD_PADDING = 6                    # card padding (px)
+CARD_RADIUS = 6                     # card corner radius (px)
+CARD_SHADOW_BLUR = 12               # shadow blur radius (px)
+CARD_SHADOW_OFFSET = (0, 3)         # shadow x,y offset
+SETTINGS_FILE = "settings.json"     # preferences file (same dir as script)
 
 # ------------------------------------------------------------
-# Main application class
+# Main application window
 # ------------------------------------------------------------
 class ProducersToolkit(QMainWindow):
-    # -------------------------
-    # Initialize the main window and all controls
-    # -------------------------
+    """Main window for Producer's Toolkit v0.19-test (QtPDF preview)."""
+
     def __init__(self):
-        # call the base class constructor
-        super().__init__()                         # initialize QMainWindow internals
+        # Initialize base QMainWindow
+        super().__init__()
 
-        # set the window title
-        self.setWindowTitle("Producer's Toolkit  v0.17-pre")
+        # Window title and size
+        self.setWindowTitle("Producer's Toolkit  v0.19-test")
+        self.resize(1400, 900)
 
-        # set an initial window size (width x height)
-        self.resize(1400, 820)
+        # Internal state variables
+        self.scenes = []                     # parsed scenes will be stored here
+        self.current_fountain_path = ""      # path to loaded fountain file
+        self.words_per_page = DEFAULTS["words_per_page"]
+        self.setup_minutes = DEFAULTS["setup_minutes"]
 
-        # application state variables initialization
-        self.scenes = []                            # list to hold parsed scenes (dicts)
-        self.current_fountain_path = ""             # path to the currently loaded fountain file
-        self.words_per_page = DEFAULTS["words_per_page"]  # active words-per-page value
-        self.lx_setup_minutes = DEFAULTS["lx_setup_minutes"]    # active minutes per setup (now dynamic)
+        # Build the UI components
+        self._build_ui()
 
-        # create the central widget that will contain layouts and widgets
-        central = QWidget()                         # main central container widget
-        self.setCentralWidget(central)              # attach as the central widget
+        # Load preferences if settings.json exists (applies to controls)
+        self._load_settings()
 
-        # create top-level vertical layout
-        self.main_layout = QVBoxLayout(central)     # vertical layout for stacking UI sections
+    # ------------------------
+    # Build main UI layout and widgets
+    # ------------------------
+    def _build_ui(self):
+        """
+        Construct the full UI:
+         - Top bar (Load + badges)
+         - Three compact cards (Timing, Calculation, Lunch placement)
+         - Main table for scenes
+         - Bottom row: last recalculated + Preview + Export controls
+        """
 
-        # -------------------------
-        # Top row: Load button
-        # -------------------------
-        top_row = QHBoxLayout()                     # horizontal layout for top row
-        self.main_layout.addLayout(top_row)         # add top row to main layout
+        # Central widget + vertical layout (holds everything)
+        central = QWidget()
+        self.setCentralWidget(central)
+        self.main_layout = QVBoxLayout(central)
 
-        # create and add the Load Fountain button
+        # ------------------------
+        # Top row: Load button (left) and badges (right)
+        # ------------------------
+        top_row = QHBoxLayout()
+        self.main_layout.addLayout(top_row)
+
+        # Load Fountain File button
         self.load_btn = QPushButton("Load Fountain File")
-        self.load_btn.clicked.connect(self.load_fountain_file)  # connect click -> file loader
-        top_row.addWidget(self.load_btn,alignment=Qt.AlignmentFlag.AlignHCenter) # place load button on top row
+        self.load_btn.setFont(QFont("Helvetica", 12))
+        self.load_btn.clicked.connect(self.load_fountain_file)
+        top_row.addWidget(self.load_btn)  # placed on left
 
-        # spacer label for visual balance
-        top_row.addWidget(QLabel(""))               # small spacer widget
+        # Spacer pushes badges to the right
+        top_row.addStretch()
 
-        # -------------------------
-        # Global Controls Bar (pale gray background)
-        # Two stacked rows: timing row and calculation row
-        # -------------------------
-        self.global_bar = QWidget()                 # container for grouped global controls
-        # apply pale gray background and some padding via stylesheet
-        self.global_bar.setStyleSheet(f"background-color: {GLOBAL_BAR_COLOR}; padding: 8px;")
-        self.main_layout.addWidget(self.global_bar) # add to main layout
+        # Badges layout to contain small pill labels
+        badges_layout = QHBoxLayout()
 
-        # vertical layout inside the global bar (to hold two horizontal rows)
-        self.global_bar_layout = QVBoxLayout(self.global_bar)
+        # Lunch Mode badge (shows Auto or Fixed)
+        self.badge_lunch = QLabel("Auto Lunch Mode")  # initial default text
+        self.badge_lunch.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
+        self.badge_lunch.setContentsMargins(8, 4, 8, 4)
+        # default green background for Auto
+        self.badge_lunch.setStyleSheet(self._badge_style("#C8E6C9"))
+        badges_layout.addWidget(self.badge_lunch)
 
-        # ---------- Global Bar - Row A: Timing Inputs ----------
-        self.label = QLabel("Basic Schedule Info:")
-        self.label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.timing_row = QHBoxLayout()             # horizontal layout for timing inputs
-        self.global_bar_layout.addWidget(self.label)
-        self.global_bar_layout.addLayout(self.timing_row)  # add timing row to global bar
-        
+        # Setup time badge (neutral gray)
+        self.badge_setup = QLabel(f"Setup Time: {self.setup_minutes} min")
+        self.badge_setup.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
+        self.badge_setup.setContentsMargins(8, 4, 8, 4)
+        self.badge_setup.setStyleSheet(self._badge_style("#E0E0E0"))
+        badges_layout.addWidget(self.badge_setup)
 
-        # Start time ComboBox (24h in 15-minute increments)
-        self.start_time_input = QComboBox()         # combo for start times
+        # Add badges to top row (right side)
+        top_row.addLayout(badges_layout)
+
+        # tiny spacing under top row
+        self.main_layout.addSpacing(8)
+
+        # ------------------------
+        # Card A: Timing inputs
+        # ------------------------
+        self.card_timing = self._make_card()
+        self.main_layout.addWidget(self.card_timing)
+        timing_layout = QHBoxLayout(self.card_timing)
+
+        # Label font 12pt bold for readability
+        label_font = QFont("Helvetica", 12, QFont.Weight.Bold)
+
+        # Company moves input (0..20)
+        lbl_moves = QLabel("Company moves:")
+        lbl_moves.setFont(label_font)
+        timing_layout.addWidget(lbl_moves)
+        self.company_moves_input = QComboBox()
+        self.company_moves_input.addItems([str(i) for i in range(0, 21)])
+        self.company_moves_input.setFont(QFont("Helvetica", 12))
+        timing_layout.addWidget(self.company_moves_input)
+
+        # Move duration (mins)
+        lbl_move_dur = QLabel("Move duration (min):")
+        lbl_move_dur.setFont(label_font)
+        timing_layout.addWidget(lbl_move_dur)
+        self.move_duration_input = QComboBox()
+        self.move_duration_input.addItems([str(i) for i in range(0, 121)])
+        self.move_duration_input.setCurrentText(str(DEFAULTS["default_move_duration"]))
+        self.move_duration_input.setFont(QFont("Helvetica", 12))
+        timing_layout.addWidget(self.move_duration_input)
+
+        # Lunch duration (mins)
+        lbl_lunch_dur = QLabel("Lunch duration (min):")
+        lbl_lunch_dur.setFont(label_font)
+        timing_layout.addWidget(lbl_lunch_dur)
+        self.lunch_duration_input = QComboBox()
+        self.lunch_duration_input.addItems([str(i) for i in range(0, 181)])
+        self.lunch_duration_input.setCurrentText(str(DEFAULTS["default_lunch_duration"]))
+        self.lunch_duration_input.setFont(QFont("Helvetica", 12))
+        timing_layout.addWidget(self.lunch_duration_input)
+
+        # Start time (24-hr, 15-min intervals)
+        lbl_start = QLabel("Start time:")
+        lbl_start.setFont(label_font)
+        timing_layout.addWidget(lbl_start)
+        self.start_time_input = QComboBox()
         times = [f"{h:02}:{m:02}" for h in range(24) for m in (0, 15, 30, 45)]
-        self.start_time_input.addItems(times)       # populate times
-        self.start_time_input.setCurrentText(DEFAULTS["default_start_time"])  # default
-        self.timing_row.addWidget(QLabel("Shoot start time:"))  # label
-        self.timing_row.addWidget(self.start_time_input)  # add control
+        self.start_time_input.addItems(times)
+        self.start_time_input.setCurrentText(DEFAULTS["default_start_time"])
+        self.start_time_input.setFont(QFont("Helvetica", 12))
+        timing_layout.addWidget(self.start_time_input)
 
-        # Company moves ComboBox (0..20)
-        self.company_moves_input = QComboBox()      # create the combo
-        self.company_moves_input.addItems([str(i) for i in range(0, 21)])  # populate 0..20
-        self.timing_row.addWidget(QLabel("Company moves:"))  # label
-        self.timing_row.addWidget(self.company_moves_input)  # add control
-
-        # Move duration ComboBox (0..120 minutes)
-        self.move_duration_input = QComboBox()      # combo for minutes per move
-        self.move_duration_input.addItems([str(i) for i in range(0, 121)]) # 0..120
-        self.move_duration_input.setCurrentText(str(DEFAULTS["default_move_duration"]))  # default
-        self.timing_row.addWidget(QLabel("Move duration (min):"))  # label
-        self.timing_row.addWidget(self.move_duration_input)        # add control
-
-        # Lunch duration ComboBox (0..180 minutes)
-        self.lunch_duration_input = QComboBox()     # combo for lunch minutes
-        self.lunch_duration_input.addItems([str(i) for i in range(0, 181)])  # 0..180
-        self.lunch_duration_input.setCurrentText(str(DEFAULTS["default_lunch_duration"]))  # default
-        self.timing_row.addWidget(QLabel("Lunch duration (min):"))  # label
-        self.timing_row.addWidget(self.lunch_duration_input)        # add control
-
-        
-
-        # Include moves & lunch toggle (checkbox)
+        # Include moves & lunch toggle
         self.include_moves_lunch_toggle = QCheckBox("Include moves && lunch in totals?")
-        self.include_moves_lunch_toggle.setChecked(True)  # default ON
-        self.timing_row.addWidget(self.include_moves_lunch_toggle)  # add toggle
+        self.include_moves_lunch_toggle.setFont(label_font)
+        self.include_moves_lunch_toggle.setChecked(True)
+        timing_layout.addWidget(self.include_moves_lunch_toggle)
 
-        # add a stretch (pushes following widgets to the left)
-        self.timing_row.addStretch()
+        # push to the left to keep row compact
+        timing_layout.addStretch()
+        self.main_layout.addSpacing(6)  # small spacing below card A
 
-        # ---------- Global Bar - Row B: Calculation & WPP Controls ----------
-        self.calc_row = QHBoxLayout()               # horizontal layout for calc controls
-        self.global_bar_layout.addLayout(self.calc_row)  # add second row to global bar
+        # ------------------------
+        # Card B: Calculation controls
+        # ------------------------
+        self.card_calc = self._make_card()
+        self.main_layout.addWidget(self.card_calc)
+        calc_layout = QHBoxLayout(self.card_calc)
 
-        # Custom WPP toggle (checkbox)
+        # Custom WPP toggle
         self.custom_wpp_toggle = QCheckBox("Use Custom Words Per Page")
-        self.custom_wpp_toggle.setChecked(False)     # default OFF
-        self.custom_wpp_toggle.stateChanged.connect(self.toggle_custom_wpp_changed)  # handler
-        self.calc_row.addWidget(self.custom_wpp_toggle)  # add to calc row
+        self.custom_wpp_toggle.setFont(label_font)
+        self.custom_wpp_toggle.stateChanged.connect(self.toggle_custom_wpp_changed)
+        calc_layout.addWidget(self.custom_wpp_toggle)
 
-        # WPP spinbox (100..250)
-        self.wpp_spin = QSpinBox()                   # create spinbox control
-        self.wpp_spin.setRange(100, 250)             # allowed range
-        self.wpp_spin.setValue(DEFAULTS["words_per_page"])  # default value 150
-        self.wpp_spin.setEnabled(False)              # disabled until toggle on
-        self.wpp_spin.valueChanged.connect(self.wpp_value_changed)  # handler
-        self.calc_row.addWidget(QLabel("Words Per Page:"))  # label
-        self.calc_row.addWidget(self.wpp_spin)        # add spinbox
+        # Words-per-page spinbox (100..250)
+        lbl_wpp = QLabel("Words Per Page:")
+        lbl_wpp.setFont(label_font)
+        calc_layout.addWidget(lbl_wpp)
+        self.wpp_spin = QSpinBox()
+        self.wpp_spin.setRange(100, 250)
+        self.wpp_spin.setValue(DEFAULTS["words_per_page"])
+        self.wpp_spin.setEnabled(False)
+        self.wpp_spin.setFont(QFont("Helvetica", 12))
+        self.wpp_spin.valueChanged.connect(self.wpp_value_changed)
+        calc_layout.addWidget(self.wpp_spin)
 
-        # New: Minutes per Setup spinbox (1..30), default self.lx_setup_minutes (5)
-        self.lx_setup_minutes_spin = QSpinBox()          # spinbox for minutes per setup
-        self.lx_setup_minutes_spin.setRange(1, 30)       # allowed values 1..30
-        self.lx_setup_minutes_spin.setValue(self.lx_setup_minutes)  # default 5
-        # When this value changes, we will auto-recalculate (no fade)
-        self.lx_setup_minutes_spin.valueChanged.connect(self.lx_setup_minutes_changed)
-        self.calc_row.addWidget(QLabel("LX & Camera Setup (mins per setup):"))  # label
-        self.calc_row.addWidget(self.lx_setup_minutes_spin)        # add control
+        # LX & Camera Setup Time label (single ampersand) + spinbox (1..30)
+        lbl_setup = QLabel("LX & Camera Setup Time (min):")
+        lbl_setup.setFont(label_font)
+        calc_layout.addWidget(lbl_setup)
+        self.setup_minutes_spin = QSpinBox()
+        self.setup_minutes_spin.setRange(1, 30)
+        self.setup_minutes_spin.setValue(self.setup_minutes)
+        self.setup_minutes_spin.setFont(QFont("Helvetica", 12))
+        # Auto-recalc (no animation) when minutes-per-setup changes
+        self.setup_minutes_spin.valueChanged.connect(self.setup_minutes_changed)
+        calc_layout.addWidget(self.setup_minutes_spin)
 
-        # Use and Lock Default Number of Setups toggle (visible but locks combos)
+        # Lock default setups toggle
         self.lock_setups_toggle = QCheckBox("Use and Lock Default Number of Setups (INT=3, EXT=5)")
-        self.lock_setups_toggle.setChecked(False)      # default OFF
-        self.lock_setups_toggle.stateChanged.connect(self.toggle_default_setups_lock)  # handler
-        self.calc_row.addWidget(self.lock_setups_toggle)  # add to calc row
+        self.lock_setups_toggle.setFont(label_font)
+        self.lock_setups_toggle.stateChanged.connect(self.toggle_default_setups_lock)
+        calc_layout.addWidget(self.lock_setups_toggle)
 
-        # push the recalc button to the far right
-        self.calc_row.addStretch()
+        calc_layout.addStretch()  # push recalc to right
 
-        # Recalculate Schedule button (manual trigger with fade UX)
+        # Recalculate button (now always triggers and gives feedback)
         self.recalc_button = QPushButton("Recalculate Schedule")
-        self.recalc_button.clicked.connect(self.trigger_recalc_with_fade)  # preferred UX
-        self.calc_row.addWidget(self.recalc_button)  # add to UI
+        self.recalc_button.setFont(QFont("Helvetica", 12))
+        # This connects to wrapper that runs recalc and shows a messagebox confirming completion
+        self.recalc_button.clicked.connect(self._recalculate_and_feedback)
+        calc_layout.addWidget(self.recalc_button)
 
-        # -------------------------
-        # Main Table Widget (below the global bar)
-        # -------------------------
-        self.table = QTableWidget()                  # create table widget
-        self.main_layout.addWidget(self.table)       # add to main layout
+        # tiny spacing below
+        self.main_layout.addSpacing(6)
 
-        # -------------------------
-        # Export row below table (CSV / PDF)
-        # -------------------------
-        export_row = QHBoxLayout()                   # layout for export controls
-        self.export_dropdown = QComboBox()           # dropdown for export choice
+        # ------------------------
+        # Card C: Lunch placement controls
+        # ------------------------
+        self.card_lunch = self._make_card()
+        self.main_layout.addWidget(self.card_lunch)
+        lunch_layout = QHBoxLayout(self.card_lunch)
+
+        self.lunch_auto_toggle = QCheckBox("Lunch Placement Mode: Auto (midpoint when checked)")
+        self.lunch_auto_toggle.setFont(label_font)
+        self.lunch_auto_toggle.setChecked(True)
+        self.lunch_auto_toggle.stateChanged.connect(self.lunch_mode_changed)
+        lunch_layout.addWidget(self.lunch_auto_toggle)
+
+        lbl_fixed = QLabel("Fixed after (hours):")
+        lbl_fixed.setFont(label_font)
+        lunch_layout.addWidget(lbl_fixed)
+        self.lunch_fixed_spin = QSpinBox()
+        self.lunch_fixed_spin.setRange(1, 12)
+        self.lunch_fixed_spin.setValue(6)
+        self.lunch_fixed_spin.setFont(QFont("Helvetica", 12))
+        self.lunch_fixed_spin.valueChanged.connect(self.lunch_fixed_hours_changed)
+        lunch_layout.addWidget(self.lunch_fixed_spin)
+
+        lunch_layout.addStretch()
+        self.main_layout.addSpacing(10)
+
+        # ------------------------
+        # Main table widget (scene rows and summary rows)
+        # ------------------------
+        self.table = QTableWidget()
+        self.main_layout.addWidget(self.table)
+
+        # ------------------------
+        # Bottom row: Last recalculated status, Preview, Export
+        # ------------------------
+        bottom_row = QHBoxLayout()
+        self.main_layout.addLayout(bottom_row)
+
+        bottom_row.addStretch()  # push items to the right
+
+        # Last recalculated label (updates whenever schedule is recalculated)
+        self.last_recalc_label = QLabel("Last recalculated: Never")
+        font = QFont("Helvetica", 10)
+        font.setItalic(True)
+        self.last_recalc_label.setFont(font)
+
+        self.last_recalc_label.setStyleSheet("color: #666666;")
+        bottom_row.addWidget(self.last_recalc_label)
+
+        # small spacing
+        bottom_row.addSpacing(12)
+
+        # Preview button (opens modal with CSV + PDF tabs)
+        self.preview_button = QPushButton("Preview")
+        self.preview_button.setFont(QFont("Helvetica", 12))
+        # Auto-load PDF preview when modal opens per v0.19-test requirements
+        self.preview_button.clicked.connect(self.open_preview_modal)
+        bottom_row.addWidget(self.preview_button)
+
+        # Export dropdown and button
+        self.export_dropdown = QComboBox()
         self.export_dropdown.addItems(["Export CSV", "Export PDF", "Export Both"])
-        self.export_button = QPushButton("Export")   # export button
-        self.export_button.clicked.connect(self.export_file)  # attach handler
-        export_row.addWidget(self.export_dropdown)   # add dropdown
-        export_row.addWidget(self.export_button)     # add button
-        export_row.addStretch()
-        self.main_layout.addLayout(export_row)       # attach export row to main layout
+        self.export_dropdown.setFont(QFont("Helvetica", 12))
+        bottom_row.addWidget(self.export_dropdown)
 
-    # -------------------------
-    # Helper: Return the active WPP (words per page)
-    # -------------------------
+        self.export_button = QPushButton("Export")
+        self.export_button.setFont(QFont("Helvetica", 12))
+        # Export wrapper warns user that preferences will be saved and then performs export + save
+        self.export_button.clicked.connect(self._export_with_save_warning)
+        bottom_row.addWidget(self.export_button)
+
+    # ------------------------
+    # Small helper to create a card-like QFrame with shadow-only styling
+    # ------------------------
+    def _make_card(self):
+        """
+        Build a QFrame styled as a compact card (rounded, drop shadow, background).
+        Returns the frame.
+        """
+        frame = QFrame()
+        frame.setStyleSheet(f"background-color: {CARD_BG}; border-radius: {CARD_RADIUS}px; padding:{CARD_PADDING}px;")
+        shadow = QGraphicsDropShadowEffect(frame)
+        shadow.setBlurRadius(CARD_SHADOW_BLUR)
+        shadow.setOffset(*CARD_SHADOW_OFFSET)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        frame.setGraphicsEffect(shadow)
+        return frame
+
+    # ------------------------
+    # Helper: CSS for badges (rounded pill look)
+    # ------------------------
+    def _badge_style(self, bg_hex):
+        """
+        Return a stylesheet string to style QLabel as a small rounded badge.
+        """
+        return (
+            f"background-color: {bg_hex}; color: #000000; border-radius: 12px; "
+            "padding-left: 8px; padding-right: 8px;"
+        )
+
+    # ------------------------
+    # SETTINGS: load saved preferences from SETTINGS_FILE
+    # ------------------------
+    def _load_settings(self):
+        """
+        Load preferences from settings.json if present. Apply to controls.
+        Safe: ignores parse errors and continues with defaults.
+        """
+        if os.path.exists(SETTINGS_FILE):
+            try:
+                with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
+                    s = json.load(f)
+                # apply saved values with sensible fallbacks
+                if "words_per_page" in s:
+                    self.words_per_page = int(s["words_per_page"])
+                    self.wpp_spin.setValue(self.words_per_page)
+                    if s.get("custom_wpp", False):
+                        self.custom_wpp_toggle.setChecked(True)
+                        self.wpp_spin.setEnabled(True)
+                if "setup_minutes" in s:
+                    self.setup_minutes = int(s["setup_minutes"])
+                    self.setup_minutes_spin.setValue(self.setup_minutes)
+                if "lunch_auto" in s:
+                    self.lunch_auto_toggle.setChecked(bool(s["lunch_auto"]))
+                if "lunch_fixed_hours" in s:
+                    self.lunch_fixed_spin.setValue(int(s["lunch_fixed_hours"]))
+                if "lock_setups" in s:
+                    self.lock_setups_toggle.setChecked(bool(s["lock_setups"]))
+                # reflect loaded preferences in badges
+                self._update_badges()
+            except Exception:
+                # on any error, ignore and keep defaults
+                pass
+
+    # ------------------------
+    # SETTINGS: write preferences to SETTINGS_FILE (called when user confirms export)
+    # ------------------------
+    def _save_settings(self):
+        """
+        Serialize current preferences to settings.json. Called on export after confirmation.
+        """
+        s = {
+            "words_per_page": int(self.wpp_spin.value()) if self.custom_wpp_toggle.isChecked() else DEFAULTS["words_per_page"],
+            "custom_wpp": bool(self.custom_wpp_toggle.isChecked()),
+            "setup_minutes": int(self.setup_minutes_spin.value()),
+            "lunch_auto": bool(self.lunch_auto_toggle.isChecked()),
+            "lunch_fixed_hours": int(self.lunch_fixed_spin.value()),
+            "lock_setups": bool(self.lock_setups_toggle.isChecked())
+        }
+        try:
+            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+                json.dump(s, f, indent=2)
+        except Exception:
+            # ignore write errors silently (don't block export)
+            pass
+
+    # ------------------------
+    # Badge updater: instantly reflect lunch mode and setup minutes
+    # ------------------------
+    def _update_badges(self):
+        """
+        Update the two badges immediately whenever relevant state changes.
+        """
+        if self.lunch_auto_toggle.isChecked():
+            self.badge_lunch.setText("Auto Lunch Mode")
+            self.badge_lunch.setStyleSheet(self._badge_style("#C8E6C9"))  # green
+        else:
+            self.badge_lunch.setText("Fixed Lunch Mode")
+            self.badge_lunch.setStyleSheet(self._badge_style("#BBDEFB"))  # blue
+        self.badge_setup.setText(f"Setup Time: {self.setup_minutes} min")
+        self.badge_setup.setStyleSheet(self._badge_style("#E0E0E0"))
+
+    # ------------------------
+    # Words-per-page helper respecting toggle
+    # ------------------------
     def get_current_wpp(self):
-        # If the custom WPP toggle is checked, return the spinbox value; else return default
         if self.custom_wpp_toggle.isChecked():
             return int(self.wpp_spin.value())
         return int(DEFAULTS["words_per_page"])
 
-    # -------------------------
-    # Event: custom WPP toggle changed
-    # -------------------------
+    # ------------------------
+    # Custom WPP toggle handler
+    # ------------------------
     def toggle_custom_wpp_changed(self, state):
-        # If checked, enable spinbox and update words_per_page
+        """
+        Enable or disable the WPP spin control based on the checkbox state,
+        update stored value, and trigger animated recalc to show changes.
+        """
         if state:
             self.wpp_spin.setEnabled(True)
             self.words_per_page = int(self.wpp_spin.value())
         else:
-            # If unchecked, disable spinbox and revert to default
             self.wpp_spin.setEnabled(False)
             self.words_per_page = DEFAULTS["words_per_page"]
+        # update badges and animate recalculation
+        self._update_badges()
+        self.trigger_recalc_with_row_fades()
 
-        # Trigger recalculation with fade to reflect change
-        self.trigger_recalc_with_fade()
-
-    # -------------------------
-    # Event: WPP spin value changed
-    # -------------------------
+    # ------------------------
+    # WPP spin change handler
+    # ------------------------
     def wpp_value_changed(self, val):
-        # Update internal WPP and recalc with fade for visual confirmation
+        """
+        Update internal WPP and animate recalc so user sees updated durations.
+        """
         self.words_per_page = int(val)
-        self.trigger_recalc_with_fade()
+        self._update_badges()
+        self.trigger_recalc_with_row_fades()
 
-    # -------------------------
-    # Event: Minutes-per-setup spinbox changed (auto-recalc, no fade)
-    # -------------------------
-    def lx_setup_minutes_changed(self, val):
-        # Update the internal lx_setup_minutes variable
-        self.lx_setup_minutes = int(val)
-
-        # Immediately recalculate schedule without animation for speed
+    # ------------------------
+    # Minutes-per-setup changed (auto recalc without animation)
+    # ------------------------
+    def setup_minutes_changed(self, val):
+        """
+        Update minutes-per-setup and run a fast (non-animated) recalculation for responsiveness.
+        """
+        self.setup_minutes = int(val)
+        self._update_badges()
         self.recalculate_schedule()
 
-    # -------------------------
-    # Handler: toggling lock/default setups behavior
-    # -------------------------
+    # ------------------------
+    # Lock default setups toggle handler (applies defaults and toggles editable state)
+    # ------------------------
     def toggle_default_setups_lock(self, state):
-        # Convert state to boolean (nonzero == True)
+        """
+        When turned on, iterate all rows and set their setups combo to default (INT/EXT),
+        then disable the widgets (visible but locked). When turned off, re-enable.
+        """
         lock_on = bool(state)
-
-        # Iterate all rows and apply lock/default logic
         for r in range(self.table.rowCount()):
-            # get widget in column 5 (setups combo) if present
-            widget = self.table.cellWidget(r, 5)
-
-            # If there is a widget (combo box), act on it
+            widget = self.table.cellWidget(r, 5)  # setups combos expected at column 5
             if widget is not None:
                 try:
                     if lock_on:
-                        # Get heading text safely
                         item = self.table.item(r, 0)
                         heading_text = item.text() if item else ""
-
-                        # Apply default based on INT/EXT and disable widget
                         if heading_text.upper().startswith("INT"):
                             widget.setCurrentText(str(DEFAULTS["setups_int"]))
                         else:
                             widget.setCurrentText(str(DEFAULTS["setups_ext"]))
-
-                        # Disable combo so it's visible but locked
                         widget.setEnabled(False)
                     else:
-                        # Unlock: enable for manual editing
                         widget.setEnabled(True)
                 except Exception:
-                    # If unexpected error, skip this widget gracefully
+                    # robust: skip any widget that causes errors
                     continue
+        # animate the recalculation so the summary rows reflect the new values
+        self.trigger_recalc_with_row_fades()
 
-        # After applying lock/unlock, recalc (use fade UX to show change)
-        self.trigger_recalc_with_fade()
+    # ------------------------
+    # Lunch mode toggle handler
+    # ------------------------
+    def lunch_mode_changed(self, state):
+        """
+        Update badges and animate recalculation when the lunch placement mode is toggled.
+        """
+        self._update_badges()
+        self.trigger_recalc_with_row_fades()
 
-    # -------------------------
-    # Load fountain file and parse it
-    # -------------------------
+    # ------------------------
+    # Fixed hours spin handler
+    # ------------------------
+    def lunch_fixed_hours_changed(self, val):
+        """
+        If the lunch mode is fixed (Auto unchecked), changing the fixed hour triggers
+        an animated recalc to show updated insertion and times.
+        """
+        if not self.lunch_auto_toggle.isChecked():
+            self.trigger_recalc_with_row_fades()
+
+    # ------------------------
+    # Load Fountain file from disk, parse, and populate table
+    # ------------------------
     def load_fountain_file(self):
-        # Open file dialog filtered for .fountain files
+        """
+        Launch file dialog to choose a .fountain file, parse it and populate the table.
+        """
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Fountain", "", "Fountain Files (*.fountain)")
         if not file_path:
-            # If user canceled, do nothing
             return
-
-        # Save path for exports
         self.current_fountain_path = file_path
-
-        # Read file contents as UTF-8
+        # read UTF-8 file contents
         with open(file_path, encoding="utf-8") as f:
             content = f.read()
-
-        # Parse into scenes
+        # parse into scenes
         self.scenes = self.parse_fountain(content)
-
-        # Populate the table UI
+        # populate the table widgets/rows
         self.populate_table()
-
-        # If lock-setups toggle is on, enforce lock immediately
+        # if lock was on previously, re-apply it to the new rows
         if self.lock_setups_toggle.isChecked():
             self.toggle_default_setups_lock(1)
+        # update badges
+        self._update_badges()
 
-    # -------------------------
-    # Simple fountain parser that splits on INT./EXT.
-    # -------------------------
+    # ------------------------
+    # Simple Fountain parser splitting on INT./EXT. headings
+    # ------------------------
     def parse_fountain(self, content):
-        scenes = []                        # list to collect scenes
-        current = None                     # placeholder for current scene
+        """
+        Parse the simplest form of Fountain: lines that start with INT. or EXT. are scene headings.
+        Returns a list of dicts: {"heading": str, "content": [lines...]}
+        """
+        scenes = []
+        current = None
         for line in content.splitlines():
-            stripped = line.strip()        # trim whitespace
+            stripped = line.strip()
             if re.match(r"^(INT\.|EXT\.)", stripped, re.I):
                 if current:
-                    scenes.append(current) # save previous scene
-                current = {"heading": stripped, "content": []}  # start new scene
+                    scenes.append(current)
+                current = {"heading": stripped, "content": []}
             elif current is not None:
-                current["content"].append(stripped)  # add content lines
+                current["content"].append(stripped)
         if current:
-            scenes.append(current)          # append final scene
-        return scenes                       # return parsed scenes
+            scenes.append(current)
+        return scenes
 
-    # -------------------------
-    # Calculate scene length (page string, mm:ss) using current WPP
-    # -------------------------
+    # ------------------------
+    # Convert a scene's text to pages + mm:ss using active WPP
+    # ------------------------
     def calculate_scene_length(self, scene_text):
-        # Count words via regex tokenization
+        """
+        Count words, compute pages as words/WPP, convert to pages + eighths and mm:ss estimate.
+        Returns: (page_str, mmss)
+        """
         words = len(re.findall(r"\w+", " ".join(scene_text)))
-
-        # Use get_current_wpp() so the toggle/spinbox is respected
         wpp = self.get_current_wpp()
-
-        # Compute pages as float (guard divide-by-zero)
         pages = (words / wpp) if wpp > 0 else 0.0
-
-        # integer part and fractional eighths
         full = int(pages)
         eighths = int(round((pages - full) * 8))
         if eighths == 8:
             full += 1
             eighths = 0
-
-        # format human-friendly page string
         if full == 0 and eighths > 0:
             page_str = f"{eighths}/8"
         elif eighths > 0:
             page_str = f"{full} {eighths}/8"
         else:
             page_str = f"{full}"
-
-        # convert pages to seconds (1 page ≈ 60s)
-        seconds = int(round(pages * 60))
+        seconds = int(round(pages * 60))  # approx 1 page = 60 sec
         mm, ss = divmod(seconds, 60)
         mmss = f"{mm:02}:{ss:02}"
         return page_str, mmss
 
-    # -------------------------
-    # Compute shooting seconds for a given scene row index using self.lx_setup_minutes
-    # -------------------------
+    # ------------------------
+    # Compute shooting time in seconds for a given scene row using self.setup_minutes
+    # ------------------------
     def compute_scene_time(self, row):
-        # retrieve the setups widget in column 5
+        """
+        Read the setups combo in column 5 and the MM:SS in column 4, add setups penalty,
+        return total seconds as int. Robust with fallbacks.
+        """
         setups_widget = self.table.cellWidget(row, 5)
-
-        # retrieve the mm:ss text in column 4
         length_item = self.table.item(row, 4)
-
-        # if either is missing, safe fallback to 0 seconds
         if setups_widget is None or length_item is None:
             return 0
-
-        # parse setups number with fallback
         try:
             setups_val = int(setups_widget.currentText())
         except Exception:
             setups_val = 0
-
-        # parse mm:ss into minutes/seconds with fallback
         try:
             mm, ss = map(int, length_item.text().split(":"))
         except Exception:
             mm, ss = 0, 0
-
-        # base minutes from scene length
         base_minutes = mm + ss / 60.0
-
-        # add setups penalty using dynamic self.lx_setup_minutes
-        total_minutes = base_minutes + setups_val * self.lx_setup_minutes
-
-        # return integer seconds
+        total_minutes = base_minutes + setups_val * self.setup_minutes
         return int(round(total_minutes * 60))
 
-    # -------------------------
-    # Handler for per-row setups combo change (robust to shifting rows)
-    # -------------------------
+    # ------------------------
+    # Handler when a per-row setups combo changes
+    # ------------------------
     def update_scene_row_for_box(self, box):
-        # find box's current row via indexAt using widget position
+        """
+        Determine the row of the changed combo (robustly), update the Shooting Time column
+        for that row, and animate recalc for summary rows.
+        """
         idx = self.table.indexAt(box.pos())
         row = idx.row()
-
-        # fallback: scan the table for the widget
+        # fallback: scan rows looking for the widget
         if row == -1:
             for r in range(self.table.rowCount()):
                 if self.table.cellWidget(r, 5) is box:
                     row = r
                     break
-
-        # if not found, return safely
         if row == -1:
             return
-
-        # compute seconds and update column 6 display
         secs = self.compute_scene_time(row)
         self.table.setItem(row, 6, QTableWidgetItem(str(timedelta(seconds=secs))))
+        self.trigger_recalc_with_row_fades()
 
-        # also trigger a recalc (with fade) to update summary rows visually
-        self.trigger_recalc_with_fade()
-
-    # -------------------------
-    # Remove summary rows to avoid duplicates (LUNCH / TOTAL / ESTIMATED WRAP)
-    # -------------------------
+    # ------------------------
+    # Remove summary rows (LUNCH, TOTAL, ESTIMATED WRAP)
+    # ------------------------
     def remove_summary_rows(self):
-        # iterate rows backward to safely remove
+        """
+        Walk backwards through rows and remove any row whose first cell starts with
+        a known summary prefix. Iterating backwards avoids index shifts.
+        """
         for r in reversed(range(self.table.rowCount())):
             item = self.table.item(r, 0)
             if item is None:
@@ -451,282 +677,254 @@ class ProducersToolkit(QMainWindow):
             if any(text.startswith(prefix) for prefix in ("LUNCH", "TOTAL SHOOT LENGTH", "ESTIMATED WRAP")):
                 self.table.removeRow(r)
 
-    # -------------------------
-    # Centralized fade + recalc UX function (used by recalc button & other UX flows)
-    # -------------------------
-    def trigger_recalc_with_fade(self):
-        # create overlay covering the table viewport
-        overlay = QWidget(self.table.viewport())
-
-        # set geometry to cover viewport fully
-        overlay.setGeometry(0, 0, self.table.viewport().width(), self.table.viewport().height())
-
-        # create opacity effect and attach
-        eff = QGraphicsOpacityEffect()
-        overlay.setGraphicsEffect(eff)
-
-        # fade-in animation
-        anim = QPropertyAnimation(eff, b"opacity", overlay)
-        anim.setDuration(FADE_DURATION_MS)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-
-        # show overlay and start fade-in
-        overlay.show()
-        anim.start()
-
-        # what to do when fade-in completes
-        def on_fade_in_finished():
-            # remove prior summary rows
-            self.remove_summary_rows()
-
-            # compute schedule summary values
-            total, wrap, lunch_start, insert_index = self.calculate_schedule()
-
-            # insert lunch if applicable
-            if lunch_start is not None and insert_index is not None:
-                self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()))
-
-            # append total and wrap rows
-            self.insert_total_row(total)
-            self.insert_wrap_row(wrap)
-
-            # refresh numbering
-            self.update_row_numbers()
-
-            # fade out overlay (slightly quicker)
-            anim2 = QPropertyAnimation(eff, b"opacity", overlay)
-            anim2.setDuration(FADE_DURATION_MS // 2)
-            anim2.setStartValue(1.0)
-            anim2.setEndValue(0.0)
-            anim2.finished.connect(overlay.deleteLater)
-            anim2.start()
-
-        # connect finished signal to handler
-        anim.finished.connect(on_fade_in_finished)
-
-    # -------------------------
-    # Recalculate schedule without fade (used by minutes-per-setup change)
-    # -------------------------
-    def recalculate_schedule(self):
-        # remove old summary rows
+    # ------------------------
+    # Animated per-row recalc (triggered by Recalculate and other visible events)
+    # ------------------------
+    def trigger_recalc_with_row_fades(self):
+        """
+        Remove old summary rows, recompute schedule, insert summaries with per-row fade animations,
+        update numbering and the last-recalc timestamp.
+        """
         self.remove_summary_rows()
-
-        # compute schedule values
         total, wrap, lunch_start, insert_index = self.calculate_schedule()
-
-        # insert lunch if present
         if lunch_start is not None and insert_index is not None:
-            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()))
-
-        # append total and wrap rows
-        self.insert_total_row(total)
-        self.insert_wrap_row(wrap)
-
-        # update row numbering
+            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()), animate=True)
+        self.insert_total_row(total, animate=True)
+        self.insert_wrap_row(wrap, animate=True)
         self.update_row_numbers()
+        self._update_last_recalc_timestamp()
 
-    # -------------------------
-    # Calculate schedule: returns totals and lunch insertion info
-    # -------------------------
+    # ------------------------
+    # Fast (non-animated) recalculation for UI spins and quick changes
+    # ------------------------
+    def recalculate_schedule(self):
+        """
+        Remove previous summaries and insert new ones without animation for speed.
+        """
+        self.remove_summary_rows()
+        total, wrap, lunch_start, insert_index = self.calculate_schedule()
+        if lunch_start is not None and insert_index is not None:
+            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()), animate=False)
+        self.insert_total_row(total, animate=False)
+        self.insert_wrap_row(wrap, animate=False)
+        self.update_row_numbers()
+        self._update_last_recalc_timestamp()
+
+    # ------------------------
+    # Update last recalculated timestamp label (bottom-right)
+    # ------------------------
+    def _update_last_recalc_timestamp(self):
+        now = datetime.now().strftime("%H:%M:%S")
+        self.last_recalc_label.setText(f"Last recalculated: {now}")
+
+    # ------------------------
+    # Scheduling logic: compute total scene seconds, wrap time, lunch start & insert index
+    # (includes fixed-mode bug fix: ensure lunch inserted after last scene if fixed time beyond total)
+    # ------------------------
     def calculate_schedule(self):
-        # total seconds for scenes (excluding lunch/moves)
+        """
+        Return tuple:
+          (total_scene_seconds:int, wrap_time_str:"HH:MM", lunch_start:datetime|None, insert_index:int|None)
+        """
         total_scene_seconds = 0
+        durations = []
+        for i in range(len(self.scenes)):
+            s = self.compute_scene_time(i)
+            durations.append(s)
+            total_scene_seconds += s
 
-        # read GUI inputs for extras
+        # read GUI extras
         lunch_min = int(self.lunch_duration_input.currentText())
         lunch_dur = lunch_min * 60
         move_min = int(self.move_duration_input.currentText()) * 60
         move_count = int(self.company_moves_input.currentText())
         include = self.include_moves_lunch_toggle.isChecked()
 
-        # durations list holds seconds per scene
-        durations = []
-        for i in range(len(self.scenes)):
-            s = self.compute_scene_time(i)   # compute for row i using current lx_setup_minutes
-            durations.append(s)
-            total_scene_seconds += s
-
-        # find midpoint to place lunch
-        midpoint = total_scene_seconds // 2
-        running = 0
         lunch_start = None
         insert_index = None
-
-        # parse start time into datetime
         start_dt = datetime.strptime(self.start_time_input.currentText(), "%H:%M")
 
-        # iterate durations to locate lunch insertion index
-        for i, secs in enumerate(durations):
-            running += secs
-            if running >= midpoint and include and lunch_start is None:
-                insert_index = i + 1                       # insert after scene i
-                lunch_start = start_dt + timedelta(seconds=running)
-                break
+        if include:
+            if self.lunch_auto_toggle.isChecked():
+                # Auto midpoint: place after first scene where running >= midpoint
+                midpoint = total_scene_seconds // 2
+                running = 0
+                for i, secs in enumerate(durations):
+                    running += secs
+                    if running >= midpoint:
+                        insert_index = i + 1
+                        lunch_start = start_dt + timedelta(seconds=running)
+                        break
+                # fallback when no durations or empty script
+                if insert_index is None:
+                    insert_index = len(durations)
+                    lunch_start = start_dt
+            else:
+                # Fixed-after-X-hours: place after first scene where running >= fixed_seconds
+                fixed_hours = int(self.lunch_fixed_spin.value())
+                fixed_seconds = fixed_hours * 3600
+                running = 0
+                for i, secs in enumerate(durations):
+                    running += secs
+                    if running >= fixed_seconds:
+                        insert_index = i + 1
+                        lunch_start = start_dt + timedelta(seconds=running)
+                        break
+                # If fixed_seconds beyond total duration of scenes, place after last scene
+                if insert_index is None:
+                    insert_index = len(durations)
+                    lunch_start = start_dt + timedelta(seconds=fixed_seconds)
 
         # compute total seconds including extras if included
         total_seconds = total_scene_seconds
         if include:
             total_seconds += lunch_dur + (move_min * move_count)
 
-        # compute wrap time clock
         wrap_dt = start_dt + timedelta(seconds=total_seconds)
         return total_scene_seconds, wrap_dt.strftime("%H:%M"), lunch_start, insert_index
 
-    # -------------------------
-    # Populate table: scenes and summary rows
-    # -------------------------
+    # ------------------------
+    # Populate table rows for scenes and initial (non-animated) summaries
+    # ------------------------
     def populate_table(self):
-        # clear any existing spans (merged cells)
+        """
+        Clear table and repopulate with scene rows, setups combos, and summary rows.
+        """
         self.table.clearSpans()
-
-        # clear items and headers
         self.table.clear()
-
-        # ensure no leftover summary rows
         self.remove_summary_rows()
 
-        # define headers
+        # define human-friendly headers (Camera Setups header preserved)
         headers = [
             "Scene Heading", "Actions", "Dialogue",
             "Length (pages+1/8s)", "Length (MM:SS)",
-            "Setups", "Shooting Time (HH:MM:SS)"
+            "Camera Setups (Count)", "Shooting Time (HH:MM:SS)"
         ]
-
-        # apply headers to table
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
-
-        # set number of rows equal to number of scenes
         self.table.setRowCount(len(self.scenes))
 
         # populate each scene row
         for i, sc in enumerate(self.scenes):
-            # heading text (e.g., "INT. OFFICE - DAY")
             heading = sc["heading"]
-
-            # calculate page/time for scene
             page_len, mmss = self.calculate_scene_length(sc["content"])
 
-            # create setups combo widget with options 1..20
+            # setups combo (1..20)
             setups_box = QComboBox()
             setups_box.addItems([str(n) for n in range(1, 21)])
-
-            # set reasonable default based on INT/EXT
+            # default INT/EXT
             if heading.upper().startswith("INT"):
                 setups_box.setCurrentText(str(DEFAULTS["setups_int"]))
             else:
                 setups_box.setCurrentText(str(DEFAULTS["setups_ext"]))
-
-            # connect combo to robust handler that takes the widget reference
+            # connect robust handler referencing the widget itself
             setups_box.currentTextChanged.connect(lambda t, box=setups_box: self.update_scene_row_for_box(box))
 
-            # place items in table columns
-            self.table.setItem(i, 0, QTableWidgetItem(heading))    # heading
-            self.table.setItem(i, 3, QTableWidgetItem(page_len))   # pages
-            self.table.setItem(i, 4, QTableWidgetItem(mmss))       # mm:ss
-            self.table.setCellWidget(i, 5, setups_box)             # setups widget
-
-            # initial shooting time for row
+            # place data into table
+            self.table.setItem(i, 0, QTableWidgetItem(heading))
+            self.table.setItem(i, 3, QTableWidgetItem(page_len))
+            self.table.setItem(i, 4, QTableWidgetItem(mmss))
+            self.table.setCellWidget(i, 5, setups_box)
             self.table.setItem(i, 6, QTableWidgetItem(str(timedelta(seconds=self.compute_scene_time(i)))))
 
-        # compute schedule summaries
+        # insert initial summaries (non-animated for load)
         total, wrap, lunch_start, insert_index = self.calculate_schedule()
-
-        # insert lunch row if applicable
         if lunch_start is not None and insert_index is not None:
-            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()))
+            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()), animate=False)
+        self.insert_total_row(total, animate=False)
+        self.insert_wrap_row(wrap, animate=False)
 
-        # append total and wrap rows
-        self.insert_total_row(total)
-        self.insert_wrap_row(wrap)
-
-        # if lock_setups toggle is ON, enforce lock on the newly created rows
+        # if lock is on, enforce it now
         if self.lock_setups_toggle.isChecked():
             self.toggle_default_setups_lock(1)
 
-        # update row numbers (scene rows numbered, summary rows not)
+        # update badges and numbering
+        self._update_badges()
         self.update_row_numbers()
+        # update last recalculated timestamp
+        self._update_last_recalc_timestamp()
 
-    # -------------------------
-    # Create a centered, bold, 12pt table item with background color
-    # -------------------------
+    # ------------------------
+    # Create a centered, bold 12pt QTableWidgetItem with background color (for summary rows)
+    # ------------------------
     def make_centered_item(self, text, color):
-        item = QTableWidgetItem(text)                  # create item with given text
-        item.setBackground(QBrush(QColor(color)))      # set background color
-        item.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))  # bold 12pt font
-        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)     # center text
-        return item                                    # return prepared item
+        item = QTableWidgetItem(text)
+        item.setBackground(QBrush(QColor(color)))
+        item.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        return item
 
-    # -------------------------
-    # Simple overlay fade for a row
-    # -------------------------
+    # ------------------------
+    # Per-row overlay fade animation
+    # ------------------------
     def animate_row(self, row):
-        overlay = QWidget(self.table.viewport())       # create overlay in table viewport
-        rect = self.table.visualRect(self.table.model().index(row, 0))  # get row rect
-        overlay.setGeometry(0, rect.y(), self.table.viewport().width(), rect.height())  # position
-        eff = QGraphicsOpacityEffect()                 # create opacity effect
-        overlay.setGraphicsEffect(eff)                 # attach effect
-        anim = QPropertyAnimation(eff, b"opacity", overlay)  # animate opacity
-        anim.setDuration(FADE_DURATION_MS)             # duration
-        anim.setStartValue(0.0)                        # from transparent
-        anim.setEndValue(1.0)                          # to opaque
-        anim.finished.connect(overlay.deleteLater)     # cleanup after finish
-        overlay.show()                                 # show overlay
-        anim.start()                                   # start animation
+        """
+        Visual overlay that fades in across a specific row to draw attention to newly inserted rows.
+        """
+        overlay = QWidget(self.table.viewport())
+        rect = self.table.visualRect(self.table.model().index(row, 0))
+        overlay.setGeometry(0, rect.y(), self.table.viewport().width(), rect.height())
+        eff = QGraphicsOpacityEffect()
+        overlay.setGraphicsEffect(eff)
+        anim = QPropertyAnimation(eff, b"opacity", overlay)
+        anim.setDuration(FADE_DURATION_MS)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.finished.connect(overlay.deleteLater)
+        overlay.show()
+        anim.start()
 
-    # -------------------------
-    # Insert lunch summary row at index (merged across columns)
-    # -------------------------
-    def insert_lunch_row(self, row_index, lunch_start_dt, lunch_minutes):
-        self.table.insertRow(row_index)                # insert new row at index
+    # ------------------------
+    # Insert summary rows: lunch, total, wrap (optionally animate)
+    # ------------------------
+    def insert_lunch_row(self, row_index, lunch_start_dt, lunch_minutes, animate=True):
+        self.table.insertRow(row_index)
         text = f"LUNCH — Starts at {lunch_start_dt.strftime('%H:%M')} ({str(timedelta(minutes=lunch_minutes))})"
-        item = self.make_centered_item(text, "orange") # style as orange bold center
-        self.table.setItem(row_index, 0, item)         # set item in first column
-        self.table.setSpan(row_index, 0, 1, self.table.columnCount())  # span across all cols
-        self.animate_row(row_index)                    # animate insertion
+        item = self.make_centered_item(text, "orange")
+        self.table.setItem(row_index, 0, item)
+        # span across all columns to create single merged-like cell
+        self.table.setSpan(row_index, 0, 1, self.table.columnCount())
+        if animate:
+            self.animate_row(row_index)
 
-    # -------------------------
-    # Insert total shoot length summary at bottom
-    # -------------------------
-    def insert_total_row(self, total_seconds):
-        row = self.table.rowCount()                    # row index at end
-        self.table.insertRow(row)                      # append row
+    def insert_total_row(self, total_seconds, animate=True):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
         text = f"TOTAL SHOOT LENGTH — {str(timedelta(seconds=total_seconds))}"
         item = self.make_centered_item(text, "lightgreen")
         self.table.setItem(row, 0, item)
         self.table.setSpan(row, 0, 1, self.table.columnCount())
-        self.animate_row(row)
+        if animate:
+            self.animate_row(row)
 
-    # -------------------------
-    # Insert estimated wrap summary at bottom (after total)
-    # -------------------------
-    def insert_wrap_row(self, wrap_str):
-        row = self.table.rowCount()                    # append row index
+    def insert_wrap_row(self, wrap_str, animate=True):
+        row = self.table.rowCount()
         self.table.insertRow(row)
         text = f"ESTIMATED WRAP — {wrap_str}"
         item = self.make_centered_item(text, "lightblue")
         self.table.setItem(row, 0, item)
         self.table.setSpan(row, 0, 1, self.table.columnCount())
-        self.animate_row(row)
+        if animate:
+            self.animate_row(row)
 
-    # -------------------------
-    # Number scene rows vertically, but leave summary rows unnumbered
-    # -------------------------
+    # ------------------------
+    # Update vertical header numbers (only number scene rows)
+    # ------------------------
     def update_row_numbers(self):
         for r in range(self.table.rowCount()):
             if not self.table.verticalHeaderItem(r):
                 self.table.setVerticalHeaderItem(r, QTableWidgetItem())
             header_item = self.table.verticalHeaderItem(r)
             first_item = self.table.item(r, 0)
+            # summary rows should have empty vertical header (no number)
             if first_item and any(first_item.text().startswith(p) for p in ("LUNCH", "TOTAL SHOOT LENGTH", "ESTIMATED WRAP")):
-                header_item.setText("")    # no number for summary rows
+                header_item.setText("")
             else:
-                header_item.setText(str(r + 1))  # scene rows numbered from 1
+                header_item.setText(str(r + 1))
 
-    # -------------------------
-    # Gather table contents into list-of-lists for export
-    # -------------------------
+    # ------------------------
+    # Gather table data (headers + rows) for exports & preview
+    # ------------------------
     def get_table_data(self):
         headers = [self.table.horizontalHeaderItem(i).text() for i in range(self.table.columnCount())]
         data = [headers]
@@ -750,68 +948,255 @@ class ProducersToolkit(QMainWindow):
             data.append(rowd)
         return data
 
-    # -------------------------
-    # Export handler
-    # -------------------------
+    # ------------------------
+    # Export helper that writes CSV/PDF to specified paths silently (returns paths)
+    # Used by both the export flow and the Preview modal (for temp files).
+    # ------------------------
+    def _write_exports(self, csv_path, pdf_path, choice="Export Both"):
+        """
+        Write CSV and/or PDF to the provided paths according to choice.
+        Returns (csv_written_path_or_None, pdf_written_path_or_None)
+        This function is silent (no messageboxes) so Preview can call it.
+        """
+        data = self.get_table_data()
+        csv_written = None
+        pdf_written = None
+
+        if choice in ("Export CSV", "Export Both"):
+            try:
+                with open(csv_path, "w", newline="", encoding="utf-8") as f:
+                    csv.writer(f).writerows(data)
+                csv_written = csv_path
+            except Exception:
+                csv_written = None
+
+        if choice in ("Export PDF", "Export Both"):
+            try:
+                styles = getSampleStyleSheet()
+                styles.add(ParagraphStyle(name="Center12", alignment=1, fontSize=12, leading=15))
+                formatted = [[Paragraph(cell, styles["Center12"]) for cell in row] for row in data]
+                table = Table(formatted)
+                ts = TableStyle([
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ])
+                for r, row in enumerate(data):
+                    if row[0].startswith("LUNCH"):
+                        ts.add("BACKGROUND", (0, r), (-1, r), colors.orange)
+                        ts.add("SPAN", (0, r), (-1, r))
+                    elif row[0].startswith("TOTAL SHOOT LENGTH"):
+                        ts.add("BACKGROUND", (0, r), (-1, r), colors.lightgreen)
+                        ts.add("SPAN", (0, r), (-1, r))
+                    elif row[0].startswith("ESTIMATED WRAP"):
+                        ts.add("BACKGROUND", (0, r), (-1, r), colors.lightblue)
+                        ts.add("SPAN", (0, r), (-1, r))
+                table.setStyle(ts)
+                SimpleDocTemplate(pdf_path, pagesize=letter).build([table])
+                pdf_written = pdf_path
+            except Exception:
+                pdf_written = None
+
+        return csv_written, pdf_written
+
+    # ------------------------
+    # Export function used by main export flow (shows message boxes)
+    # ------------------------
     def export_file(self):
+        """
+        Export to files located next to the loaded fountain file.
+        This function will show message boxes on success/failure and return paths.
+        """
         if not self.current_fountain_path:
             QMessageBox.warning(self, "No File", "Load a Fountain file first.")
-            return
+            return None, None
+
+        base = os.path.dirname(self.current_fountain_path)
+        name = os.path.splitext(os.path.basename(self.current_fountain_path))[0]
+        csv_path = os.path.join(base, f"breakdown_{name}.csv")
+        pdf_path = os.path.join(base, f"breakdown_{name}.pdf")
         choice = self.export_dropdown.currentText()
-        if choice == "Export CSV":
-            self.export_csv()
-        elif choice == "Export PDF":
-            self.export_pdf()
+
+        csv_written, pdf_written = self._write_exports(csv_path, pdf_path, choice=choice)
+
+        # show user feedback
+        if csv_written:
+            QMessageBox.information(self, "Export Complete", f"CSV exported to: {csv_written}")
+        if pdf_written:
+            QMessageBox.information(self, "Export Complete", f"PDF exported to: {pdf_written}")
+        if not csv_written and not pdf_written:
+            QMessageBox.critical(self, "Export Error", "No files could be exported (check permissions).")
+
+        return csv_written, pdf_written
+
+    # ------------------------
+    # Export wrapper that warns user preferences will be saved, then saves and exports
+    # ------------------------
+    def _export_with_save_warning(self):
+        """
+        Ask the user to confirm that export will save preferences to settings.json.
+        On Yes: save settings, perform export, update badges/timestamp.
+        """
+        reply = QMessageBox.question(
+            self,
+            "Export and Save Preferences",
+            "Exporting will also save your preferences to settings.json. Continue?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.No:
+            return
+        # Save preferences
+        self._save_settings()
+        # Perform export
+        csv_path, pdf_path = self.export_file()
+        # Update badges and timestamp (preferences persisted)
+        self._update_badges()
+        self._update_last_recalc_timestamp()
+
+    # ------------------------
+    # Recalculate wrapper that triggers animation and gives feedback
+    # ------------------------
+    def _recalculate_and_feedback(self):
+        """
+        Run animated recalculation and show a confirmation dialog to the user.
+        """
+        self.trigger_recalc_with_row_fades()
+        QMessageBox.information(self, "Recalculated", "Schedule successfully updated.")
+
+    # ------------------------
+    # Preview modal dialog (auto-load PDF preview via QtPDF if available)
+    # ------------------------
+    def open_preview_modal(self):
+        """
+        Create a modal dialog with:
+         - CSV Preview tab (QTableWidget)
+         - PDF Preview tab (QPdfView if available; else HTML/QTextBrowser fallback)
+        The PDF is generated into a temporary directory and loaded automatically.
+        """
+        # create a temporary directory for preview artifacts
+        tempdir = tempfile.mkdtemp(prefix="producertoolkit_preview_")
+        csv_path = os.path.join(tempdir, "preview.csv")
+        pdf_path = os.path.join(tempdir, "preview.pdf")
+
+        # write preview files silently (don't save preferences here)
+        choice = "Export Both"
+        csv_written, pdf_written = self._write_exports(csv_path, pdf_path, choice=choice)
+
+        # Build modal dialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Preview (CSV & PDF)")
+        dlg.resize(1100, 750)
+        dlg_layout = QVBoxLayout(dlg)
+
+        # Tabs for CSV and PDF preview
+        tabs = QTabWidget()
+        dlg_layout.addWidget(tabs)
+
+        # --- CSV Preview tab: build QTableWidget snapshot from CSV
+        data = self.get_table_data()
+        csv_table = QTableWidget()
+        if data:
+            headers = data[0]
+            rows = data[1:]
+            csv_table.setColumnCount(len(headers))
+            csv_table.setRowCount(len(rows))
+            csv_table.setHorizontalHeaderLabels(headers)
+            for r, row in enumerate(rows):
+                for c, cell in enumerate(row):
+                    csv_table.setItem(r, c, QTableWidgetItem(cell))
+            csv_table.resizeColumnsToContents()
+        tabs.addTab(csv_table, "CSV Preview")
+
+        # --- PDF Preview tab: use QtPDF if available (QPdfDocument + QPdfView), auto-load
+        if QT_PDF_AVAILABLE and pdf_written:
+            # create QPdfDocument and load the generated PDF file
+            pdf_doc = QPdfDocument(dlg)
+            load_status = pdf_doc.load(pdf_written)
+            # QPdfView widget renders the document (interactive, zoomable)
+            pdf_view = QPdfView(dlg)
+            pdf_view.setDocument(pdf_doc)
+            # Add the view into the tab (auto-loads the document)
+            tabs.addTab(pdf_view, "PDF Preview (QtPDF)")
         else:
-            self.export_csv()
-            self.export_pdf()
+            # Fallback: render a scrollable HTML representation of the PDF content
+            # This is less faithful than a real renderer, but still useful for inspection.
+            pdf_browser = QTextBrowser()
+            # Use the CSV-style HTML paging fallback (25 rows per page heuristic)
+            rows_per_page = 25
+            rows = data[1:] if len(data) > 1 else []
+            total_pages = max(1, (len(rows) + rows_per_page - 1) // rows_per_page)
+            html_parts = []
+            for p in range(total_pages):
+                start = p * rows_per_page
+                end = start + rows_per_page
+                page_rows = rows[start:end]
+                html_parts.append(f"<h3>Page {p+1}</h3>")
+                html_parts.append("<table border='1' cellpadding='6' cellspacing='0' width='100%'>")
+                # header row
+                html_parts.append("<tr>")
+                for h in data[0]:
+                    html_parts.append(f"<th>{h}</th>")
+                html_parts.append("</tr>")
+                # data rows
+                for row in page_rows:
+                    html_parts.append("<tr>")
+                    for cell in row:
+                        html_parts.append(f"<td>{cell}</td>")
+                    html_parts.append("</tr>")
+                html_parts.append("</table>")
+                html_parts.append("<div style='height:12px'></div>")
+            pdf_browser.setHtml("\n".join(html_parts))
+            tabs.addTab(pdf_browser, "PDF Preview (Fallback)")
 
-    # -------------------------
-    # Export CSV to same folder as source
-    # -------------------------
-    def export_csv(self):
-        base = os.path.dirname(self.current_fountain_path)
-        name = os.path.splitext(os.path.basename(self.current_fountain_path))[0]
-        path = os.path.join(base, f"breakdown_{name}.csv")
-        data = self.get_table_data()
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerows(data)
+        # Bottom row for actions: Open in default app + Close
+        bottom = QHBoxLayout()
+        dlg_layout.addLayout(bottom)
+        bottom.addStretch()
 
-    # -------------------------
-    # Export PDF using ReportLab; preserve merged summary rows
-    # -------------------------
-    def export_pdf(self):
-        base = os.path.dirname(self.current_fountain_path)
-        name = os.path.splitext(os.path.basename(self.current_fountain_path))[0]
-        path = os.path.join(base, f"breakdown_{name}.pdf")
-        data = self.get_table_data()
-        styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name="Center12", alignment=1, fontSize=12, leading=15))
-        formatted = [[Paragraph(cell, styles["Center12"]) for cell in row] for row in data]
-        table = Table(formatted)
-        ts = TableStyle([
-            ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ])
-        for r, row in enumerate(data):
-            if row[0].startswith("LUNCH"):
-                ts.add("BACKGROUND", (0, r), (-1, r), colors.orange)
-                ts.add("SPAN", (0, r), (-1, r))
-            elif row[0].startswith("TOTAL SHOOT LENGTH"):
-                ts.add("BACKGROUND", (0, r), (-1, r), colors.lightgreen)
-                ts.add("SPAN", (0, r), (-1, r))
-            elif row[0].startswith("ESTIMATED WRAP"):
-                ts.add("BACKGROUND", (0, r), (-1, r), colors.lightblue)
-                ts.add("SPAN", (0, r), (-1, r))
-        table.setStyle(ts)
-        SimpleDocTemplate(path, pagesize=letter).build([table])
+        def open_exported():
+            # Prefer OS-opening the PDF if it exists, otherwise the CSV
+            target = pdf_written if pdf_written and os.path.exists(pdf_written) else csv_written if csv_written and os.path.exists(csv_written) else None
+            if not target:
+                QMessageBox.warning(dlg, "Open Error", "No preview file available to open.")
+                return
+            try:
+                if sys.platform.startswith("win"):
+                    os.startfile(target)
+                elif sys.platform.startswith("darwin"):
+                    os.system(f"open '{target}'")
+                else:
+                    os.system(f"xdg-open '{target}' &")
+            except Exception as e:
+                QMessageBox.warning(dlg, "Open Error", f"Could not open file: {e}")
+
+        open_btn = QPushButton("Open in Default App")
+        open_btn.setFont(QFont("Helvetica", 12))
+        open_btn.clicked.connect(open_exported)
+        bottom.addWidget(open_btn)
+
+        close_btn = QPushButton("Close")
+        close_btn.setFont(QFont("Helvetica", 12))
+        close_btn.clicked.connect(dlg.accept)
+        bottom.addWidget(close_btn)
+
+        # Show modal dialog; auto-load already performed by QPdfDocument/QPdfView if available
+        dlg.exec()
+
+    # ------------------------
+    # Remaining methods reused from previous implementations (populate_table etc.)
+    # ------------------------
+    # They are already implemented above (calculate_scene_length, compute_scene_time, update_scene_row_for_box,
+    # remove_summary_rows, trigger_recalc_with_row_fades, recalculate_schedule, insert_lunch_row, insert_total_row,
+    # insert_wrap_row, update_row_numbers, get_table_data). For clarity, these methods are fully defined earlier
+    # in the class. No extra changes required here.
 
 # ------------------------------------------------------------
-# Run the application
+# Application entrypoint
 # ------------------------------------------------------------
 if __name__ == "__main__":
-    app = QApplication(sys.argv)         # create Qt application
-    window = ProducersToolkit()          # instantiate the toolkit window
-    window.show()                        # show window
-    sys.exit(app.exec())                 # run event loop and exit on close
+    # create Qt application and show main window
+    app = QApplication(sys.argv)
+    window = ProducersToolkit()
+    window.show()
+    # start Qt event loop
+    sys.exit(app.exec())

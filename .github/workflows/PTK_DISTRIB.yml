@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ['3.11']
+        python-version: ['3.12']
     
     steps:
     - name: Checkout code
@@ -34,61 +34,61 @@ jobs:
     - name: Build with PyInstaller (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        pyinstaller --onefile --windowed --name MyApp --icon=icon.ico main.py
+        pyinstaller --onefile --windowed --name Producers-Toolkit_0.19-Test --icon=icon.ico Producers-Toolkit.py
     
     - name: Build with PyInstaller (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        pyinstaller --onefile --windowed --name MyApp --icon=icon.icns main.py
+        pyinstaller --onefile --windowed --name Producers-Toolkit_0.19-Test --icon=icon.icns Producers-Toolkit.py
     
     - name: Build with PyInstaller (Linux)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        pyinstaller --onefile --name MyApp main.py
+        pyinstaller --onefile --name Producers-Toolkit_0.19-Test Producers-Toolkit.py
     
     - name: Create DMG for macOS
       if: matrix.os == 'macos-latest'
       run: |
         brew install create-dmg
         create-dmg \
-          --volname "MyApp Installer" \
+          --volname "Producers-Toolkit_0.19-Test Installer" \
           --window-pos 200 120 \
           --window-size 800 400 \
           --icon-size 100 \
           --app-drop-link 600 185 \
-          "MyApp-macOS.dmg" \
-          "dist/MyApp.app"
+          "Producers-Toolkit_0.19-Test-macOS.dmg" \
+          "dist/Producers-Toolkit_0.19-Test.app"
     
     - name: Create ZIP for Windows
       if: matrix.os == 'windows-latest'
       run: |
-        Compress-Archive -Path dist/MyApp.exe -DestinationPath MyApp-Windows.zip
+        Compress-Archive -Path dist/Producers-Toolkit_0.19-Test.exe -DestinationPath Producers-Toolkit_0.19-Test-Windows.zip
     
     - name: Create TAR.GZ for Linux
       if: matrix.os == 'ubuntu-latest'
       run: |
-        tar -czvf MyApp-Linux.tar.gz -C dist MyApp
+        tar -czvf Producers-Toolkit_0.19-Test-Linux.tar.gz -C dist Producers-Toolkit_0.19-Test
     
     - name: Upload Windows Artifact
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: MyApp-Windows
-        path: MyApp-Windows.zip
+        name: Producers-Toolkit_0.19-Test-Windows
+        path: Producers-Toolkit_0.19-Test-Windows.zip
     
     - name: Upload macOS Artifact
       if: matrix.os == 'macos-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: MyApp-macOS
-        path: MyApp-macOS.dmg
+        name: Producers-Toolkit_0.19-Test-macOS
+        path: Producers-Toolkit_0.19-Test-macOS.dmg
     
     - name: Upload Linux Artifact
       if: matrix.os == 'ubuntu-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: MyApp-Linux
-        path: MyApp-Linux.tar.gz
+        name: Producers-Toolkit_0.19-Test-Linux
+        path: Producers-Toolkit_0.19-Test-Linux.tar.gz
 
   release:
     name: Create Release
@@ -104,9 +104,9 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          MyApp-Windows/MyApp-Windows.zip
-          MyApp-macOS/MyApp-macOS.dmg
-          MyApp-Linux/MyApp-Linux.tar.gz
+          Producers-Toolkit_0.19-Test-Windows/Producers-Toolkit_0.19-Test-Windows.zip
+          Producers-Toolkit_0.19-Test-macOS/Producers-Toolkit_0.19-Test-macOS.dmg
+          Producers-Toolkit_0.19-Test-Linux/Producers-Toolkit_0.19-Test-Linux.tar.gz
         draft: false
         prerelease: false
       env:
