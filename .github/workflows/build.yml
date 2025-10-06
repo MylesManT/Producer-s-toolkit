@@ -31,16 +31,7 @@ jobs:
       - name: Build executable
         run: pyinstaller --onefile PTK/Producers-Toolkit.py
 
-      - name: Rename executable
-        run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            mv dist/app.exe dist/app-windows.exe
-          elif [[ "$RUNNER_OS" == "Linux" ]]; then
-            mv dist/app dist/app-linux
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            mv dist/app dist/app-macos
-          fi
-        shell: bash
+   
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
