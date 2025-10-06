@@ -850,3 +850,4 @@ if __name__ == "__main__":
     window = ProducersToolkit()          # instantiate the main window
     window.show()                        # display the window
     sys.exit(app.exec())                 # enter Qt event loop and exit when the window closes
+#FIRST WORKING TEST
