@@ -48,6 +48,45 @@ jobs:
         run: |
           pyinstaller --onefile --name Producers-Toolkit_0.19-Test PTK/Producers-Toolkit.py
 
+      - name: Create DEB package for Ubuntu
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p producers-toolkit-deb/DEBIAN
+          mkdir -p producers-toolkit-deb/usr/local/bin
+          mkdir -p producers-toolkit-deb/usr/share/applications
+          mkdir -p producers-toolkit-deb/usr/share/pixmaps
+          
+          # Copy executable
+          cp dist/Producers-Toolkit_0.19-Test producers-toolkit-deb/usr/local/bin/producers-toolkit
+          chmod +x producers-toolkit-deb/usr/local/bin/producers-toolkit
+          
+          # Create control file
+          cat > producers-toolkit-deb/DEBIAN/control << EOF
+          Package: producers-toolkit
+          Version: 0.19
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Myles A. Taylor <muncht@gmail.com>
+          Description: Producers Toolkit Application
+           A comprehensive toolkit for producers.
+          EOF
+          
+          # Create desktop entry
+          cat > producers-toolkit-deb/usr/share/applications/producers-toolkit.desktop << EOF
+          [Desktop Entry]
+          Name=Producers Toolkit
+          Comment=Producers Toolkit Application
+          Exec=/usr/local/bin/producers-toolkit
+          Terminal=false
+          Type=Application
+          Categories=Utility;
+          EOF
+          
+          # Build the deb package
+          dpkg-deb --build producers-toolkit-deb
+          mv producers-toolkit-deb.deb Producers-Toolkit_0.19-Test-Ubuntu.deb
+
       - name: Create DMG for macOS
         if: matrix.os == 'macos-latest'
         run: |
@@ -93,6 +132,13 @@ jobs:
           name: build_artifact_linux
           path: Producers-Toolkit_0.19-Test-Linux.tar.gz
 
+      - name: Upload Ubuntu DEB Artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build_artifact_ubuntu_deb
+          path: Producers-Toolkit_0.19-Test-Ubuntu.deb
+
   release:
     name: Release pushed tag
     if: startsWith(github.ref, 'refs/tags/')
@@ -122,6 +168,12 @@ jobs:
           name: build_artifact_linux
           path: build_artifact_linux
 
+      - name: Download Ubuntu DEB artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build_artifact_ubuntu_deb
+          path: build_artifact_ubuntu_deb
+
       - name: Display structure of downloaded files
         run: ls -R
 
@@ -140,7 +192,8 @@ jobs:
             
             - **Windows**: Producers-Toolkit_0.19-Test-Windows.zip
             - **macOS**: Producers-Toolkit_0.19-Test-macOS.dmg
-            - **Linux**: Producers-Toolkit_0.19-Test-Linux.tar.gz
+            - **Linux (Generic)**: Producers-Toolkit_0.19-Test-Linux.tar.gz
+            - **Ubuntu/Debian**: Producers-Toolkit_0.19-Test-Ubuntu.deb
             
             ## Installation Instructions
             
@@ -154,10 +207,15 @@ jobs:
             2. Open the DMG file
             3. Drag Producers Toolkit to your Applications folder
             
-            ### Linux
+            ### Linux (Generic)
             1. Download Producers-Toolkit_0.19-Test-Linux.tar.gz
             2. Extract: `tar -xzvf Producers-Toolkit_0.19-Test-Linux.tar.gz`
             3. Run: `./Producers-Toolkit_0.19-Test`
+            
+            ### Ubuntu/Debian
+            1. Download Producers-Toolkit_0.19-Test-Ubuntu.deb
+            2. Install: `sudo dpkg -i Producers-Toolkit_0.19-Test-Ubuntu.deb`
+            3. Launch from applications menu or run: `producers-toolkit`
           draft: false
           prerelease: false
 
@@ -190,3 +248,13 @@ jobs:
           asset_path: ./build_artifact_linux/Producers-Toolkit_0.19-Test-Linux.tar.gz
           asset_name: Producers-Toolkit_0.19-Test-Linux.tar.gz
           asset_content_type: application/gzip
+
+      - name: Upload Ubuntu DEB Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build_artifact_ubuntu_deb/Producers-Toolkit_0.19-Test-Ubuntu.deb
+          asset_name: Producers-Toolkit_0.19-Test-Ubuntu.deb
+          asset_content_type: application/vnd.debian.binary-package
