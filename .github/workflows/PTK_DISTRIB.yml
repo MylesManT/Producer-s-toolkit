@@ -48,44 +48,27 @@ jobs:
         run: |
           pyinstaller --onefile --name Producers-Toolkit_0.19-Test PTK/Producers-Toolkit.py
 
-      - name: Create DEB package for Ubuntu
+      - name: Build DEB package for Ubuntu
         if: matrix.os == 'ubuntu-latest'
         run: |
-          mkdir -p producers-toolkit-deb/DEBIAN
-          mkdir -p producers-toolkit-deb/usr/local/bin
-          mkdir -p producers-toolkit-deb/usr/share/applications
-          mkdir -p producers-toolkit-deb/usr/share/pixmaps
+          # Install fpm
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev rubygems build-essential
+          sudo gem install --no-document fpm
           
-          # Copy executable
-          cp dist/Producers-Toolkit_0.19-Test producers-toolkit-deb/usr/local/bin/producers-toolkit
-          chmod +x producers-toolkit-deb/usr/local/bin/producers-toolkit
+          # Create DEB package using fpm
+          fpm -s dir -t deb \
+            -n producers-toolkit \
+            -v 0.19 \
+            --description "Producers Toolkit Application" \
+            --maintainer "Myles Taylor" \
+            --license "MIT" \
+            --category utils \
+            --architecture amd64 \
+            dist/Producers-Toolkit_0.19-Test=/usr/local/bin/producers-toolkit
           
-          # Create control file
-          cat > producers-toolkit-deb/DEBIAN/control << EOF
-          Package: producers-toolkit
-          Version: 0.19
-          Section: utils
-          Priority: optional
-          Architecture: amd64
-          Maintainer: Myles A. Taylor <muncht@gmail.com>
-          Description: Producers Toolkit Application
-           A comprehensive toolkit for producers.
-          EOF
-          
-          # Create desktop entry
-          cat > producers-toolkit-deb/usr/share/applications/producers-toolkit.desktop << EOF
-          [Desktop Entry]
-          Name=Producers Toolkit
-          Comment=Producers Toolkit Application
-          Exec=/usr/local/bin/producers-toolkit
-          Terminal=false
-          Type=Application
-          Categories=Utility;
-          EOF
-          
-          # Build the deb package
-          dpkg-deb --build producers-toolkit-deb
-          mv producers-toolkit-deb.deb Producers-Toolkit_0.19-Test-Ubuntu.deb
+          # Rename to match convention
+          mv producers-toolkit_0.19_amd64.deb Producers-Toolkit_0.19-Test-Ubuntu.deb
 
       - name: Create DMG for macOS
         if: matrix.os == 'macos-latest'
@@ -258,4 +241,3 @@ jobs:
           asset_path: ./build_artifact_ubuntu_deb/Producers-Toolkit_0.19-Test-Ubuntu.deb
           asset_name: Producers-Toolkit_0.19-Test-Ubuntu.deb
           asset_content_type: application/vnd.debian.binary-package
-          # End of existing code...
