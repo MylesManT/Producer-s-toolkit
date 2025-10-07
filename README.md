@@ -1,14 +1,13 @@
 # Dependencies
 
-    This project requires the following system-level packages:
+    Ubuntu users must install the following dependencies:
 
     
     **libxcb-cursor0**
 
     You can install it using:
 
-    ```
-    bash
+    ```bash
     sudo apt update
     sudo apt install libxcb-cursor0
-    ```
+    
