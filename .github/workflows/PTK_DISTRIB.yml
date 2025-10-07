@@ -101,6 +101,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
@@ -122,13 +125,68 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R
 
-      - name: Create GitHub release and upload files
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            build_artifact_windows/*.zip
-            build_artifact_macos/*.dmg
-            build_artifact_linux/*.tar.gz
+      - name: Create GitHub release
+        id: create_release
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-# ...existing code...
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Producers Toolkit ${{ github.ref_name }}
+          body: |
+            ## Downloads
+            
+            Choose the appropriate file for your operating system:
+            
+            - **Windows**: Producers-Toolkit_0.19-Test-Windows.zip
+            - **macOS**: Producers-Toolkit_0.19-Test-macOS.dmg
+            - **Linux**: Producers-Toolkit_0.19-Test-Linux.tar.gz
+            
+            ## Installation Instructions
+            
+            ### Windows
+            1. Download Producers-Toolkit_0.19-Test-Windows.zip
+            2. Extract the ZIP file
+            3. Run Producers-Toolkit_0.19-Test.exe
+            
+            ### macOS
+            1. Download Producers-Toolkit_0.19-Test-macOS.dmg
+            2. Open the DMG file
+            3. Drag Producers Toolkit to your Applications folder
+            
+            ### Linux
+            1. Download Producers-Toolkit_0.19-Test-Linux.tar.gz
+            2. Extract: `tar -xzvf Producers-Toolkit_0.19-Test-Linux.tar.gz`
+            3. Run: `./Producers-Toolkit_0.19-Test`
+          draft: false
+          prerelease: false
+
+      - name: Upload Windows Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build_artifact_windows/Producers-Toolkit_0.19-Test-Windows.zip
+          asset_name: Producers-Toolkit_0.19-Test-Windows.zip
+          asset_content_type: application/zip
+
+      - name: Upload macOS Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build_artifact_macos/Producers-Toolkit_0.19-Test-macOS.dmg
+          asset_name: Producers-Toolkit_0.19-Test-macOS.dmg
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Upload Linux Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./build_artifact_linux/Producers-Toolkit_0.19-Test-Linux.tar.gz
+          asset_name: Producers-Toolkit_0.19-Test-Linux.tar.gz
+          asset_content_type: application/gzip
