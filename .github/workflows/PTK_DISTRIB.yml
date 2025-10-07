@@ -48,28 +48,6 @@ jobs:
         run: |
           pyinstaller --onefile --name Producers-Toolkit_0.19-Test PTK/Producers-Toolkit.py
 
-      - name: Build DEB package for Ubuntu
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          # Install fpm
-          sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev rubygems build-essential
-          sudo gem install --no-document fpm
-          
-          # Create DEB package using fpm
-          fpm -s dir -t deb \
-            -n producers-toolkit \
-            -v 0.19 \
-            --description "Producers Toolkit Application" \
-            --maintainer "Myles Taylor" \
-            --license "MIT" \
-            --category utils \
-            --architecture amd64 \
-            dist/Producers-Toolkit_0.19-Test=/usr/local/bin/producers-toolkit
-          
-          # Rename to match convention
-          mv producers-toolkit_0.19_amd64.deb Producers-Toolkit_0.19-Test-Ubuntu.deb
-
       - name: Create DMG for macOS
         if: matrix.os == 'macos-latest'
         run: |
@@ -115,13 +93,6 @@ jobs:
           name: build_artifact_linux
           path: Producers-Toolkit_0.19-Test-Linux.tar.gz
 
-      - name: Upload Ubuntu DEB Artifact
-        if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: build_artifact_ubuntu_deb
-          path: Producers-Toolkit_0.19-Test-Ubuntu.deb
-
   release:
     name: Release pushed tag
     if: startsWith(github.ref, 'refs/tags/')
@@ -151,12 +122,6 @@ jobs:
           name: build_artifact_linux
           path: build_artifact_linux
 
-      - name: Download Ubuntu DEB artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build_artifact_ubuntu_deb
-          path: build_artifact_ubuntu_deb
-
       - name: Display structure of downloaded files
         run: ls -R
 
@@ -175,8 +140,7 @@ jobs:
             
             - **Windows**: Producers-Toolkit_0.19-Test-Windows.zip
             - **macOS**: Producers-Toolkit_0.19-Test-macOS.dmg
-            - **Linux (Generic)**: Producers-Toolkit_0.19-Test-Linux.tar.gz
-            - **Ubuntu/Debian**: Producers-Toolkit_0.19-Test-Ubuntu.deb
+            - **Linux**: Producers-Toolkit_0.19-Test-Linux.tar.gz
             
             ## Installation Instructions
             
@@ -190,15 +154,10 @@ jobs:
             2. Open the DMG file
             3. Drag Producers Toolkit to your Applications folder
             
-            ### Linux (Generic)
+            ### Linux
             1. Download Producers-Toolkit_0.19-Test-Linux.tar.gz
             2. Extract: `tar -xzvf Producers-Toolkit_0.19-Test-Linux.tar.gz`
             3. Run: `./Producers-Toolkit_0.19-Test`
-            
-            ### Ubuntu/Debian
-            1. Download Producers-Toolkit_0.19-Test-Ubuntu.deb
-            2. Install: `sudo dpkg -i Producers-Toolkit_0.19-Test-Ubuntu.deb`
-            3. Launch from applications menu or run: `producers-toolkit`
           draft: false
           prerelease: false
 
@@ -231,13 +190,3 @@ jobs:
           asset_path: ./build_artifact_linux/Producers-Toolkit_0.19-Test-Linux.tar.gz
           asset_name: Producers-Toolkit_0.19-Test-Linux.tar.gz
           asset_content_type: application/gzip
-
-      - name: Upload Ubuntu DEB Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build_artifact_ubuntu_deb/Producers-Toolkit_0.19-Test-Ubuntu.deb
-          asset_name: Producers-Toolkit_0.19-Test-Ubuntu.deb
-          asset_content_type: application/vnd.debian.binary-package
