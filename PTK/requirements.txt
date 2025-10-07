@@ -1,4 +1,0 @@
-PyQt6==6.9.1
-pyqt6_sip==13.10.2
-reportlab==4.4.4
-pyinstaller
