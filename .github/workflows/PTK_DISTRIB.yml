@@ -73,21 +73,21 @@ jobs:
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: Producers-Toolkit_0.19-Test-Windows
+        name: Producers-Toolkit_0.19-Test-Windows.zip
         path: Producers-Toolkit_0.19-Test-Windows.zip
     
     - name: Upload macOS Artifact
       if: matrix.os == 'macos-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: Producers-Toolkit_0.19-Test-macOS
+        name: Producers-Toolkit_0.19-Test-macOS.dmg
         path: Producers-Toolkit_0.19-Test-macOS.dmg
     
     - name: Upload Linux Artifact
       if: matrix.os == 'ubuntu-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: Producers-Toolkit_0.19-Test-Linux
+        name: Producers-Toolkit_0.19-Test-Linux.tar.gz
         path: Producers-Toolkit_0.19-Test-Linux.tar.gz
 
   release:
