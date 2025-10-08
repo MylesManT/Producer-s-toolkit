@@ -65,7 +65,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/Producer's Toolkit.exe -DestinationPath Producer's Toolkit-Windows.zip
+          Compress-Archive -Path dist/Producer's Toolkit.exe -DestinationPath ProducersToolkit-Windows_latest.zip
 
       - name: Create TAR.GZ for Linux
         if: matrix.os == 'ubuntu-latest'
