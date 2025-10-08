@@ -36,62 +36,62 @@ jobs:
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          pyinstaller --onefile --windowed --name Producers-Toolkit_0.19-Test PTK/Producers-Toolkit.py
+          pyinstaller --onefile --windowed --name Producer's Toolkit-Toolkit_latest PTK/Producer's Toolkit-Toolkit.py
 
       - name: Build (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          pyinstaller --onefile --windowed --name Producers-Toolkit_0.19-Test PTK/Producers-Toolkit.py
+          pyinstaller --onefile --windowed --name Producer's Toolkit-Toolkit_latest PTK/Producer's Toolkit-Toolkit.py
 
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          pyinstaller --onefile --name Producers-Toolkit_0.19-Test PTK/Producers-Toolkit.py
+          pyinstaller --onefile --name Producer's Toolkit-Toolkit_latest PTK/Producer's Toolkit-Toolkit.py
 
       - name: Create DMG for macOS
         if: matrix.os == 'macos-latest'
         run: |
           brew install create-dmg
           create-dmg \
-            --volname "Producers-Toolkit_0.19-Test Installer" \
+            --volname "Producer's Toolkit Installer" \
             --window-pos 200 120 \
             --window-size 800 400 \
             --icon-size 100 \
             --app-drop-link 600 185 \
-            "Producers-Toolkit_0.19-Test-macOS.dmg" \
-            "dist/Producers-Toolkit_0.19-Test.app"
+            "Producer's Toolkit-macOS.dmg" \
+            "dist/Producer's-Toolkit.app"
 
       - name: Create ZIP for Windows
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Compress-Archive -Path dist/Producers-Toolkit_0.19-Test.exe -DestinationPath Producers-Toolkit_0.19-Test-Windows.zip
+          Compress-Archive -Path dist/Producer's Toolkit.exe -DestinationPath Producer's Toolkit-Windows.zip
 
       - name: Create TAR.GZ for Linux
         if: matrix.os == 'ubuntu-latest'
         run: |
-          tar -czvf Producers-Toolkit_0.19-Test-Linux.tar.gz -C dist Producers-Toolkit_0.19-Test
+          tar -czvf Producer's Toolkit-Linux.tar.gz -C dist Producer's Toolkit
 
       - name: Upload Windows Artifact
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: build_artifact_windows
-          path: Producers-Toolkit_0.19-Test-Windows.zip
+          path: Producer's Toolkit-Windows.zip
 
       - name: Upload macOS Artifact
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: build_artifact_macos
-          path: Producers-Toolkit_0.19-Test-macOS.dmg
+          path: Producer's Toolkit-macOS.dmg
 
       - name: Upload Linux Artifact
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: build_artifact_linux
-          path: Producers-Toolkit_0.19-Test-Linux.tar.gz
+          path: Producer's Toolkit-Linux.tar.gz
 
   release:
     name: Release pushed tag
@@ -132,32 +132,32 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.ref_name }}
-          release_name: Producers Toolkit ${{ github.ref_name }}
+          release_name: Producer's Toolkit Toolkit ${{ github.ref_name }}
           body: |
             ## Downloads
             
             Choose the appropriate file for your operating system:
             
-            - **Windows**: Producers-Toolkit_0.19-Test-Windows.zip
-            - **macOS**: Producers-Toolkit_0.19-Test-macOS.dmg
-            - **Linux**: Producers-Toolkit_0.19-Test-Linux.tar.gz
+            - **Windows**: Producer's Toolkit-Windows.zip
+            - **macOS**: Producer's Toolkit-macOS.dmg
+            - **Linux**: Producer's Toolkit-Linux.tar.gz
             
             ## Installation Instructions
             
             ### Windows
-            1. Download Producers-Toolkit_0.19-Test-Windows.zip
+            1. Download Producer's Toolkit-Windows.zip
             2. Extract the ZIP file
-            3. Run Producers-Toolkit_0.19-Test.exe
+            3. Run Producer's Toolkit.exe
             
             ### macOS
-            1. Download Producers-Toolkit_0.19-Test-macOS.dmg
+            1. Download Producer's Toolkit-macOS.dmg
             2. Open the DMG file
-            3. Drag Producers Toolkit to your Applications folder
+            3. Drag Producer's Toolkit Toolkit to your Applications folder
             
             ### Linux
-            1. Download Producers-Toolkit_0.19-Test-Linux.tar.gz
-            2. Extract: `tar -xzvf Producers-Toolkit_0.19-Test-Linux.tar.gz`
-            3. Run: `./Producers-Toolkit_0.19-Test`
+            1. Download Producer's Toolkit-Linux.tar.gz
+            2. Extract: `tar -xzvf Producer's Toolkit-Linux.tar.gz`
+            3. Run: `./Producer's Toolkit`
           draft: false
           prerelease: false
 
@@ -167,8 +167,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build_artifact_windows/Producers-Toolkit_0.19-Test-Windows.zip
-          asset_name: Producers-Toolkit_0.19-Test-Windows.zip
+          asset_path: ./build_artifact_windows/Producer's Toolkit-Windows.zip
+          asset_name: Producer's Toolkit-Windows.zip
           asset_content_type: application/zip
 
       - name: Upload macOS Release Asset
@@ -177,8 +177,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build_artifact_macos/Producers-Toolkit_0.19-Test-macOS.dmg
-          asset_name: Producers-Toolkit_0.19-Test-macOS.dmg
+          asset_path: ./build_artifact_macos/Producer's Toolkit-macOS.dmg
+          asset_name: Producer's Toolkit-macOS.dmg
           asset_content_type: application/x-apple-diskimage
 
       - name: Upload Linux Release Asset
@@ -187,6 +187,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./build_artifact_linux/Producers-Toolkit_0.19-Test-Linux.tar.gz
-          asset_name: Producers-Toolkit_0.19-Test-Linux.tar.gz
+          asset_path: ./build_artifact_linux/Producer's Toolkit-Linux.tar.gz
+          asset_name: Producer's Toolkit-Linux.tar.gz
           asset_content_type: application/gzip
+      
+
+
+                 
+      
+
+      
