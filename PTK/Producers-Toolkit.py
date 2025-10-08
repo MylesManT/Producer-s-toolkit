@@ -1,7 +1,7 @@
 # ------------------------------------------------------------
-# Producers-Toolkit_v0.20.2-dev.py
+# Producers-Toolkit_v0.20.4a-dev.py
 # ------------------------------------------------------------
-# Version: v0.20.2-dev
+# Version: v0.20.4a-dev
 #
 # Requirements:
 #      Python 3.12+
@@ -20,6 +20,7 @@ import json
 import re
 import csv
 import tempfile
+import uuid
 from datetime import timedelta, datetime
 
 # ------------------------
@@ -83,7 +84,7 @@ class ProducersToolkit(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Producer's Toolkit v0.20.2-dev")
+        self.setWindowTitle("Producer's Toolkit v0.20.4a-dev")
         self.resize(1400, 900)
 
         # Internal application state
@@ -320,10 +321,10 @@ class ProducersToolkit(QMainWindow):
         bottom_row.addStretch()
 
         # Preview and Export controls in bottom right
-        self.btn_preview = QPushButton("Preview")
-        self.btn_preview.setFont(self._system_ui_font(12, bold=True))
-        self.btn_preview.clicked.connect(self.open_preview_modal)
-        bottom_row.addWidget(self.btn_preview)
+        #self.btn_preview = QPushButton("Preview")
+        #self.btn_preview.setFont(self._system_ui_font(12, bold=True))
+        #self.btn_preview.clicked.connect(self.open_preview_modal)
+        #bottom_row.addWidget(self.btn_preview)
 
         self.export_dropdown = QComboBox()
         self.export_dropdown.addItems(["Export CSV", "Export PDF", "Export Both"])

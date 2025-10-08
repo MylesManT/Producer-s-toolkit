@@ -1,0 +1,8 @@
+{
+  "custom_wpp": false,
+  "words_per_page": 150,
+  "setup_minutes": 5,
+  "lunch_auto": true,
+  "lunch_fixed_hours": 4,
+  "lock_setups": false
+}
