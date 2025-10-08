@@ -212,269 +212,142 @@ class ProducersToolkit(QMainWindow):
         return frame
 
 
-    # --------------------------------------------------------
-    # UI builder: constructs and arranges all widgets
-    # --------------------------------------------------------
-    def _build_ui(self):
-        """
-        Build the full application UI. This function creates:
-          - top row (Load button + badges)
-          - three global control "cards"
-          - main QTableWidget for scenes
-          - bottom row with last-recalculated, preview, and export controls
+    # ===== PART 2: UI build, load/recalc logic =====
 
-        The helper _make_card() is used to create card-styled QFrame containers.
-        """
-        # Create the central widget and primary vertical layout
+    def _build_ui(self):
         central = QWidget()
         self.setCentralWidget(central)
-        self.main_layout = QVBoxLayout(central)   # vertical stack for the entire app
-
-        # ------------------------
-        # Top row: load button (left) and badges (right)
-        # ------------------------
+        layout = QVBoxLayout(central)
+        layout.setSpacing(6)
         top_row = QHBoxLayout()
-        self.main_layout.addLayout(top_row)
+        layout.addLayout(top_row)
 
-        # Load Fountain file button:
-        # - left side of top row
-        self.load_btn = QPushButton("Load Fountain File")
-        self.load_btn.setFont(self._system_ui_font(12, bold=False))
-        # connect click signal to load method (implemented in Part 2)
-        self.load_btn.clicked.connect(self.load_fountain_file)
-        top_row.addWidget(self.load_btn)
-
-        # Expand spacer pushes badges to the far right
-        top_row.addStretch()
-
-        # Badges container: small pill labels (Lunch Mode, Setup Time)
-        badges_layout = QHBoxLayout()
-
-        # Lunch Mode badge (initially shows "Auto Lunch Mode")
-        self.badge_lunch = QLabel("Auto Lunch Mode")
-        # use system font bold so it reads like a badge
-        self.badge_lunch.setFont(self._system_ui_font(12, bold=True))
-        # small internal padding on the label for the pill look
-        self.badge_lunch.setContentsMargins(8, 4, 8, 4)
-        # default background style (Auto = soft green)
-        self.badge_lunch.setStyleSheet(self._badge_style("#C8E6C9"))
-        badges_layout.addWidget(self.badge_lunch)
-
-        # Setup time badge (neutral gray)
-        self.badge_setup = QLabel(f"Setup Time: {self.setup_minutes} min")
-        self.badge_setup.setFont(self._system_ui_font(12, bold=True))
-        self.badge_setup.setContentsMargins(8, 4, 8, 4)
-        self.badge_setup.setStyleSheet(self._badge_style("#E0E0E0"))
-        badges_layout.addWidget(self.badge_setup)
-
-        # add badges layout to the right side of the top row
-        top_row.addLayout(badges_layout)
-
-        # tiny vertical space after top row
-        self.main_layout.addSpacing(8)
-
-        # ------------------------
-        # CARD A: Timing Inputs
-        # ------------------------
-        # create a card-like QFrame to hold timing-related controls
-        self.card_timing = self._make_card()
-        self.main_layout.addWidget(self.card_timing)
-        timing_layout = QHBoxLayout(self.card_timing)
-
-        # label font (12pt bold)
+        mid_row = QHBoxLayout()
+        layout.addLayout(mid_row)
+        
+        
         label_font = self._system_ui_font(12, bold=True)
         combo_view_font = self._system_ui_font(8, bold=False)
 
-        # Company moves label + combo
+        self.card_timing = self._make_card()
+        timing_layout = QHBoxLayout(self.card_timing)
+        top_row.addWidget(self.card_timing)
+
+        lbl_start = QLabel("Start Time:")
+        lbl_start.setFont(self._system_ui_font(12, bold=True))
+        timing_layout.addWidget(lbl_start)
+        self.start_time_input = QComboBox()
+        self.start_time_input.setFont(self._system_ui_font(12))
+        self.start_time_input.addItems([f"{h:02}:00" for h in range(0, 24)])
+        self.start_time_input.setCurrentText("08:00")
+        timing_layout.addWidget(self.start_time_input)
+
+        
+        self.card_moves = self._make_card()
+        moves_layout = QHBoxLayout(self.card_moves)
+        mid_row.addWidget(self.card_moves)
+        
+        lbl_lunch = QLabel("Lunch Duration (hrs):")
+        lbl_lunch.setFont(self._system_ui_font(12, bold=True))
+        moves_layout.addWidget(lbl_lunch)
+        self.lunch_duration_input = QSpinBox()
+        self.lunch_duration_input.setFont(self._system_ui_font(12))
+        self.lunch_duration_input.setRange(0, 12)
+        self.lunch_duration_input.setValue(1)
+        moves_layout.addWidget(self.lunch_duration_input)
+        self.auto_lunch_toggle = QCheckBox("Auto Lunch Timing")
+        self.auto_lunch_toggle.setFont(self._system_ui_font(12))
+        self.auto_lunch_toggle.setChecked(True)
+        moves_layout.addWidget(self.auto_lunch_toggle)
+        moves_layout.addStretch
+                # Company moves label + combo
         lbl_moves = QLabel("Company moves:")
         lbl_moves.setFont(label_font)
-        timing_layout.addWidget(lbl_moves)
+        moves_layout.addWidget(lbl_moves)
         self.company_moves_input = QComboBox()
         self.company_moves_input.addItems([str(i) for i in range(0, 21)])  # 0..20
         self.company_moves_input.setFont(self._system_ui_font(12))
-        timing_layout.addWidget(self.company_moves_input)
+        moves_layout.addWidget(self.company_moves_input)
 
-        # Move duration label + combo
-        lbl_move_dur = QLabel("Move duration (min):")
-        lbl_move_dur.setFont(label_font)
-        timing_layout.addWidget(lbl_move_dur)
-        self.move_duration_input = QComboBox()
-        self.move_duration_input.addItems([str(i) for i in range(0, 121)])  # 0..120
-        self.move_duration_input.setCurrentText(str(DEFAULTS["default_move_duration"]))
+        lbl_moves = QLabel("Company Move Duration (mins):")
+        lbl_moves.setFont(self._system_ui_font(12, bold=True))
+        moves_layout.addWidget(lbl_moves)
+        self.move_duration_input = QSpinBox()
         self.move_duration_input.setFont(self._system_ui_font(12))
-        self.move_duration_input.view().setMinimumWidth(self.move_duration_input.width()-375)
-        timing_layout.addWidget(self.move_duration_input)
+        self.move_duration_input.setRange(0, 12)
+        self.move_duration_input.setValue(1)
+        moves_layout.addWidget(self.move_duration_input)
 
-        # Lunch duration label + combo
-        lbl_lunch_dur = QLabel("Lunch duration (min):")
-        lbl_lunch_dur.setFont(label_font)
-        timing_layout.addWidget(lbl_lunch_dur)
-        self.lunch_duration_input = QComboBox()
-        self.lunch_duration_input.addItems([str(i) for i in range(0, 181)])  # 0..180
-        self.lunch_duration_input.setCurrentText(str(DEFAULTS["default_lunch_duration"]))
-        self.lunch_duration_input.setFont(self._system_ui_font(12))
-        self.lunch_duration_input.view().setMinimumWidth(self.lunch_duration_input.width()-375)
-        timing_layout.addWidget(self.lunch_duration_input)
-
-        # Start time label + combo (24-hour, 15-min intervals)
-        lbl_start = QLabel("Start time:")
-        lbl_start.setFont(label_font)
-        timing_layout.addWidget(lbl_start)
-        self.start_time_input = QComboBox()
-        times = [f"{h:02}:{m:02}" for h in range(24) for m in (0, 15, 30, 45)]
-        self.start_time_input.addItems(times)
-        self.start_time_input.setCurrentText(DEFAULTS["default_start_time"])
-        self.start_time_input.setFont(self._system_ui_font(12))
-        self.start_time_input.view().setMinimumWidth(self.start_time_input.width()-375)
-        timing_layout.addWidget(self.start_time_input)
-
-        # Include moves & lunch toggle
-        self.include_moves_lunch_toggle = QCheckBox("Include moves && lunch in totals?")
-        self.include_moves_lunch_toggle.setFont(label_font)
+        self.include_moves_lunch_toggle = QCheckBox("Calculate with Moves && Lunch")
+        self.include_moves_lunch_toggle.setFont(self._system_ui_font(12))
         self.include_moves_lunch_toggle.setChecked(True)
-        timing_layout.addWidget(self.include_moves_lunch_toggle)
+        moves_layout.addWidget(self.include_moves_lunch_toggle)
+        moves_layout.addStretch()
 
-        # keep the row compact by pushing remaining items to left
-        timing_layout.addStretch()
 
-        # small spacing below card A
-        self.main_layout.addSpacing(6)
 
-        # ------------------------
-        # CARD B: Calculation Controls
-        # ------------------------
-        # card for WPP, LX & setup time, lock setups, and recalc
+
+
+
+
+
+
+        
+
         self.card_calc = self._make_card()
-        self.main_layout.addWidget(self.card_calc)
         calc_layout = QHBoxLayout(self.card_calc)
-
-        # Custom WPP toggle
-        self.custom_wpp_toggle = QCheckBox("Use Custom Words Per Page")
-        self.custom_wpp_toggle.setFont(label_font)
-        self.custom_wpp_toggle.stateChanged.connect(self.toggle_custom_wpp_changed)
-        calc_layout.addWidget(self.custom_wpp_toggle)
-
-        # WPP label + spinbox (100..250)
-        lbl_wpp = QLabel("Words Per Page:")
-        lbl_wpp.setFont(label_font)
+        top_row.addWidget(self.card_calc)
+        lbl_wpp = QLabel("Words per Page:")
+        lbl_wpp.setFont(self._system_ui_font(12, bold=True))
         calc_layout.addWidget(lbl_wpp)
         self.wpp_spin = QSpinBox()
-        self.wpp_spin.setRange(100, 250)
-        self.wpp_spin.setValue(DEFAULTS["words_per_page"])
-        self.wpp_spin.setEnabled(False)  # disabled until custom toggle is checked
         self.wpp_spin.setFont(self._system_ui_font(12))
-        self.wpp_spin.valueChanged.connect(self.wpp_value_changed)
+        self.wpp_spin.setRange(100, 400)
+        self.wpp_spin.setValue(150)
         calc_layout.addWidget(self.wpp_spin)
-
-        # LX & Camera Setup Time label + spinbox (1..30)
-        lbl_setup = QLabel("LX & Camera Setup Time (min):")
-        lbl_setup.setFont(label_font)
+        lbl_setup = QLabel("LX & Camera Setup (min):")
+        lbl_setup.setFont(self._system_ui_font(12, bold=True))
         calc_layout.addWidget(lbl_setup)
         self.setup_minutes_spin = QSpinBox()
-        self.setup_minutes_spin.setRange(1, 30)
-        self.setup_minutes_spin.setValue(self.setup_minutes)
         self.setup_minutes_spin.setFont(self._system_ui_font(12))
-        # changing setup minutes should auto-recalc (fast, non-animated)
-        self.setup_minutes_spin.valueChanged.connect(self.setup_minutes_changed)
+        self.setup_minutes_spin.setRange(1, 60)
+        self.setup_minutes_spin.setValue(5)
         calc_layout.addWidget(self.setup_minutes_spin)
 
-        # Lock default setups toggle (visible but disables per-row combos if ON)
-        self.lock_setups_toggle = QCheckBox("Use and Lock Default Number of Setups (INT=3, EXT=5)")
-        self.lock_setups_toggle.setFont(label_font)
-        self.lock_setups_toggle.stateChanged.connect(self.toggle_default_setups_lock)
-        calc_layout.addWidget(self.lock_setups_toggle)
+        self.card_actions = self._make_card()
+        act_layout = QHBoxLayout(self.card_actions)
+        top_row.addWidget(self.card_actions)
+        self.btn_load = QPushButton("Load Fountain")
+        self.btn_load.setFont(self._system_ui_font(12, bold=True))
+        self.btn_load.clicked.connect(self.load_fountain_file)
+        act_layout.addWidget(self.btn_load)
+        self.btn_recalc = QPushButton("Recalculate Schedule")
+        self.btn_recalc.setFont(self._system_ui_font(12, bold=True))
+        self.btn_recalc.clicked.connect(self.recalculate_schedule)
+        act_layout.addWidget(self.btn_recalc)
+        self.btn_export = QPushButton("Export")
+        self.btn_export.setFont(self._system_ui_font(12, bold=True))
+        self.btn_export.clicked.connect(self.export_file)
+        act_layout.addWidget(self.btn_export)
+        self.btn_preview = QPushButton("Preview")
+        self.btn_preview.setFont(self._system_ui_font(12, bold=True))
+        self.btn_preview.clicked.connect(self.open_preview_modal)
+        act_layout.addWidget(self.btn_preview)
 
-        # push recalc to the right
-        calc_layout.addStretch()
 
-        # Recalculate Schedule button (always triggers recalc)
-        self.recalc_button = QPushButton("Recalculate Schedule")
-        self.recalc_button.setFont(self._system_ui_font(12))
-        # this connects to a wrapper that will trigger animated recalculation and show feedback
-        self.recalc_button.clicked.connect(self._recalculate_and_feedback)
-        calc_layout.addWidget(self.recalc_button)
+        
 
-        # small spacing below card B
-        self.main_layout.addSpacing(6)
-
-        # ------------------------
-        # CARD C: Lunch Placement Controls
-        # ------------------------
-        self.card_lunch = self._make_card()
-        self.main_layout.addWidget(self.card_lunch)
-        lunch_layout = QHBoxLayout(self.card_lunch)
-
-        # Lunch auto toggle (midpoint when checked)
-        self.lunch_auto_toggle = QCheckBox("Lunch Placement Mode: Auto (midpoint when checked)")
-        self.lunch_auto_toggle.setFont(label_font)
-        self.lunch_auto_toggle.setChecked(True)
-        self.lunch_auto_toggle.stateChanged.connect(self.lunch_mode_changed)
-        lunch_layout.addWidget(self.lunch_auto_toggle)
-
-        # Fixed after X hours label + spinbox
-        lbl_fixed = QLabel("Fixed after (hours):")
-        lbl_fixed.setFont(label_font)
-        lunch_layout.addWidget(lbl_fixed)
-        self.lunch_fixed_spin = QSpinBox()
-        self.lunch_fixed_spin.setRange(1, 12)
-        self.lunch_fixed_spin.setValue(6)  # default 6-hour option
-        self.lunch_fixed_spin.setFont(self._system_ui_font(12))
-        # changes here trigger animated recalc only if fixed mode is active
-        self.lunch_fixed_spin.valueChanged.connect(self.lunch_fixed_hours_changed)
-        lunch_layout.addWidget(self.lunch_fixed_spin)
-
-        lunch_layout.addStretch()
-        # small spacing after lunch card
-        self.main_layout.addSpacing(10)
-
-        # ------------------------
-        # Main table placeholder (populated in Part 2)
-        # ------------------------
         self.table = QTableWidget()
-        self.main_layout.addWidget(self.table)
-
-        # ------------------------
-        # Bottom row: last recalculated label + Preview + Export controls
-        # ------------------------
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(["Scene #", "Slugline", "Page Count", "Setups", "Length", "Start", "End"])
+        self.table.setFont(self._system_ui_font(12))
+        layout.addWidget(self.table)
         bottom_row = QHBoxLayout()
-        self.main_layout.addLayout(bottom_row)
-
-        # push items toward the right side
-        bottom_row.addStretch()
-
-        # Last recalculated label: show time of last recalc; use italic font via setItalic(True)
-        self.last_recalc_label = QLabel("Last recalculated: Never")
-        # create font object and set italic (PyQt6 prefers setItalic rather than enum)
-        last_font = self._system_ui_font(10)
-        last_font.setItalic(True)
-        self.last_recalc_label.setFont(last_font)
-        self.last_recalc_label.setStyleSheet("color: #666666;")
+        layout.addLayout(bottom_row)
+        self.last_recalc_label = QLabel("Last recalculated: --:--:--")
+        self.last_recalc_label.setFont(self._system_ui_font(12, italic=True))
         bottom_row.addWidget(self.last_recalc_label)
-
-        # small spacing before controls
-        bottom_row.addSpacing(12)
-
-        # Preview button (opens modal with CSV + PDF tabs; auto-loads PDF)
-        self.preview_button = QPushButton("Preview")
-        self.preview_button.setFont(self._system_ui_font(12))
-        self.preview_button.clicked.connect(self.open_preview_modal)  # implemented in Part 3
-        bottom_row.addWidget(self.preview_button)
-
-        # Export dropdown and button
-        self.export_dropdown = QComboBox()
-        self.export_dropdown.addItems(["Export CSV", "Export PDF", "Export Both"])
-        self.export_dropdown.setFont(self._system_ui_font(12))
-        bottom_row.addWidget(self.export_dropdown)
-
-        self.export_button = QPushButton("Export")
-        self.export_button.setFont(self._system_ui_font(12))
-        # wrapper warns that prefs will be saved; implemented in Part 2
-        self.export_button.clicked.connect(self._export_with_save_warning)
-        bottom_row.addWidget(self.export_button)
-
-        # Final spacing at the bottom
-        self.main_layout.addSpacing(6)
-
+        bottom_row.addStretch()
 # End of Part 1
 # ------------------------------------------------------------
 # When you're ready, ask for Part 2 (scheduling, recalc, export helpers, table population).
@@ -548,9 +421,9 @@ class ProducersToolkit(QMainWindow):
             # fixed lunch hours
             if "lunch_fixed_hours" in s:
                 try:
-                    self.lunch_fixed_spin.setValue(int(s["lunch_fixed_hours"]))
+                    self.lunch_duration_input.setValue(int(s["lunch_fixed_hours"]))
                 except Exception:
-                    self.lunch_fixed_spin.setValue(6)
+                    self.lunch_duration_input.setValue(6)
 
             # lock setups state
             if "lock_setups" in s:
@@ -579,7 +452,7 @@ class ProducersToolkit(QMainWindow):
                 "words_per_page": int(self.wpp_spin.value()) if self.custom_wpp_toggle.isChecked() else DEFAULTS["words_per_page"],
                 "setup_minutes": int(self.setup_minutes_spin.value()),
                 "lunch_auto": bool(self.lunch_auto_toggle.isChecked()),
-                "lunch_fixed_hours": int(self.lunch_fixed_spin.value()),
+                "lunch_fixed_hours": int(self.lunch_duration_input.value()),
                 "lock_setups": bool(self.lock_setups_toggle.isChecked())
             }
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
@@ -609,50 +482,7 @@ class ProducersToolkit(QMainWindow):
         self.badge_setup.setStyleSheet(self._badge_style("#E0E0E0"))
 
     # ------------------------
-    # Words-per-page (WPP) helper used in scene page calculations
-    # ------------------------
-    def get_current_wpp(self):
-        """
-        Return the effective words-per-page based on whether custom toggle is enabled.
-        """
-        if self.custom_wpp_toggle.isChecked():
-            return int(self.wpp_spin.value())
-        return int(DEFAULTS["words_per_page"])
-
-    # ------------------------
-    # WPP toggle change handler
-    # ------------------------
-    def toggle_custom_wpp_changed(self, state):
-        """
-        Called when the custom WPP checkbox changes.
-        Enables/disables the spinbox and triggers an animated recalc to show new values.
-        """
-        if state:
-            self.wpp_spin.setEnabled(True)
-            self.words_per_page = int(self.wpp_spin.value())
-        else:
-            self.wpp_spin.setEnabled(False)
-            self.words_per_page = DEFAULTS["words_per_page"]
-
-        # update badges visually and animate recalculation for user feedback
-        self._update_badges()
-        self.trigger_recalc_with_row_fades()
-
-    # ------------------------
-    # WPP spinbox value handler
-    # ------------------------
-    def wpp_value_changed(self, val):
-        """
-        Handle changes to the words-per-page spinbox.
-        Update internal value and trigger animated recompute.
-        """
-        try:
-            self.words_per_page = int(val)
-        except Exception:
-            self.words_per_page = DEFAULTS["words_per_page"]
-        self._update_badges()
-        self.trigger_recalc_with_row_fades()
-
+    
     # ------------------------
     # Minutes-per-setup change handler (fast recalc)
     # ------------------------
@@ -800,7 +630,7 @@ class ProducersToolkit(QMainWindow):
         # count words in the scene content
         words = len(re.findall(r"\w+", " ".join(scene_text)))
         # effective words per page
-        wpp = self.get_current_wpp()
+        wpp = DEFAULTS["words_per_page"]
         # compute fractional pages
         pages = (words / wpp) if wpp > 0 else 0.0
         full = int(pages)
@@ -916,7 +746,7 @@ class ProducersToolkit(QMainWindow):
 
         # insert lunch row if applicable
         if lunch_start is not None and insert_index is not None:
-            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()), animate=True)
+            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.value()), animate=True)
 
         # insert total and wrap rows (appended at bottom)
         self.insert_total_row(total, animate=True)
@@ -938,7 +768,7 @@ class ProducersToolkit(QMainWindow):
         self.remove_summary_rows()
         total, wrap, lunch_start, insert_index = self.calculate_schedule()
         if lunch_start is not None and insert_index is not None:
-            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()), animate=False)
+            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.value()), animate=False)
         self.insert_total_row(total, animate=False)
         self.insert_wrap_row(wrap, animate=False)
         self.update_row_numbers()
@@ -967,9 +797,9 @@ class ProducersToolkit(QMainWindow):
             total_scene_seconds += secs
 
         # read UI extras
-        lunch_min = int(self.lunch_duration_input.currentText())
+        lunch_min = int(self.lunch_duration_input.value())
         lunch_dur = lunch_min * 60
-        move_min = int(self.move_duration_input.currentText()) * 60
+        move_min = int(self.move_duration_input.value()) * 60
         move_count = int(self.company_moves_input.currentText())
         include = self.include_moves_lunch_toggle.isChecked()
 
@@ -982,7 +812,7 @@ class ProducersToolkit(QMainWindow):
 
         # if extras are to be included, compute lunch insertion point
         if include:
-            if self.lunch_auto_toggle.isChecked():
+            if self.auto_lunch_toggle.isChecked():
                 # Auto: compute midpoint and insert after first scene where running >= midpoint
                 midpoint = total_scene_seconds // 2
                 running = 0
@@ -998,7 +828,7 @@ class ProducersToolkit(QMainWindow):
                     lunch_start = start_dt
             else:
                 # Fixed mode: insert after scene where running >= fixed_seconds
-                fixed_hours = int(self.lunch_fixed_spin.value())
+                fixed_hours = int(self.lunch_duration_input.value())
                 fixed_seconds = fixed_hours * 3600
                 running = 0
                 for i, secs in enumerate(durations):
@@ -1081,7 +911,7 @@ class ProducersToolkit(QMainWindow):
         # after populating scenes, compute summaries (non-animated for initial load)
         total, wrap, lunch_start, insert_index = self.calculate_schedule()
         if lunch_start is not None and insert_index is not None:
-            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.currentText()), animate=False)
+            self.insert_lunch_row(insert_index, lunch_start, int(self.lunch_duration_input.value()), animate=False)
         self.insert_total_row(total, animate=False)
         self.insert_wrap_row(wrap, animate=False)
 
