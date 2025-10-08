@@ -58,7 +58,7 @@ jobs:
             --window-size 800 400 \
             --icon-size 100 \
             --app-drop-link 600 185 \
-            "Producer's Toolkit-macOS.dmg" \
+            "Producers-Toolkit-macOS_latest.dmg" \
             "dist/Producer's-Toolkit.app"
 
       - name: Create ZIP for Windows
