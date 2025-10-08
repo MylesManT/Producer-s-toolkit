@@ -286,7 +286,7 @@ class ProducersToolkit(QMainWindow):
         act_layout = QHBoxLayout(self.card_actions)
         top_row.addWidget(self.card_actions)
 
-        self.btn_load = QPushButton("Load Scrrenplay (.fountain) File")
+        self.btn_load = QPushButton("Load Screenplay (.fountain) File")
         self.btn_load.setFont(self._system_ui_font(12, bold=True))
         self.btn_load.clicked.connect(self.load_fountain_file)
         act_layout.addWidget(self.btn_load)
