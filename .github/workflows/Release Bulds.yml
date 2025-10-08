@@ -77,21 +77,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build_artifact_windows
-          path: Producer's Toolkit-Windows.zip
+          path: Producers-Toolkit_latest-Windows.zip
 
       - name: Upload macOS Artifact
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: build_artifact_macos
-          path: Producer's Toolkit-macOS.dmg
+          path: Producers-Toolkit-macOS.dmg
 
       - name: Upload Linux Artifact
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: build_artifact_linux
-          path: Producer's Toolkit-Linux.tar.gz
+          path: Producers-Toolkit-Linux.tar.gz
 
   release:
     name: Release pushed tag
