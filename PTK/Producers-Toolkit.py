@@ -1,7 +1,7 @@
 # ------------------------------------------------------------
-# Producers-Toolkit_v0.20.4a-release.py
+# Producers-Toolkit_v0.20.4b-release.py
 # ------------------------------------------------------------
-# Version: v0.20.4a-release
+# Version: v0.20.4b-release
 #
 # Requirements:
 #      Python 3.12+
@@ -79,12 +79,12 @@ SETTINGS_FILE = "settings.json"
 # ------------------------------------------------------------
 class ProducersToolkit(QMainWindow):
     """
-    Main application window for Producer's Toolkit v0.20.4a-release.
+    Main application window for Producer's Toolkit v0.20.4b-release.
     """
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Producer's Toolkit v0.20.4a-release")
+        self.setWindowTitle("Producer's Toolkit v0.20.4b-release")
         self.resize(1400, 900)
 
         # Internal application state
@@ -286,7 +286,7 @@ class ProducersToolkit(QMainWindow):
         act_layout = QHBoxLayout(self.card_actions)
         top_row.addWidget(self.card_actions)
 
-        self.btn_load = QPushButton("Load Fountain")
+        self.btn_load = QPushButton("Load Scrrenplay (.fountain) File")
         self.btn_load.setFont(self._system_ui_font(12, bold=True))
         self.btn_load.clicked.connect(self.load_fountain_file)
         act_layout.addWidget(self.btn_load)
