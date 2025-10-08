@@ -37,12 +37,14 @@ from PyQt6.QtGui import QBrush, QColor, QFont
 # ------------------------
 # Optional QtPDF imports
 # ------------------------
+# We attempt to import QtPDF modules. If they're unavailable, we'll fall back to the HTML text preview in the modal.
 try:
     from PyQt6.QtPdf import QPdfDocument
     from PyQt6.QtPdfWidgets import QPdfView
     QT_PDF_AVAILABLE = True
 except Exception:
     QT_PDF_AVAILABLE = False
+
 
 # ------------------------
 # reportlab imports for PDF export
