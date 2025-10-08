@@ -1,7 +1,7 @@
 # ------------------------------------------------------------
-# Producers-Toolkit_v0.20.4b-release.py
+# Producers-Toolkit_v0.20.4c-release.py
 # ------------------------------------------------------------
-# Version: v0.20.4b-release
+# Version: v0.20.4c-release
 #
 # Requirements:
 #      Python 3.12+
@@ -79,12 +79,12 @@ SETTINGS_FILE = "settings.json"
 # ------------------------------------------------------------
 class ProducersToolkit(QMainWindow):
     """
-    Main application window for Producer's Toolkit v0.20.4b-release.
+    Main application window for Producer's Toolkit v0.20.4c-release.
     """
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Producer's Toolkit v0.20.4b-release")
+        self.setWindowTitle("Producer's Toolkit v0.20.4c-release")
         self.resize(1400, 900)
 
         # Internal application state
