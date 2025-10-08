@@ -32,6 +32,7 @@ import os                     # for file and path ops
 import json                   # to persist settings to a JSON file
 import re                     # simple regex for fountain parsing
 import csv                    # CSV export
+import uuid
 import tempfile               # temporary directories for preview artifacts
 from datetime import timedelta, datetime  # time arithmetic and formatting
 
