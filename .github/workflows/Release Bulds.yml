@@ -160,9 +160,10 @@ jobs:
             3. Drag Producers Toolkit to your Applications folder
             
             ### Linux
-            1. Download Producers-Toolkit_Linux_latest.tar.gz
-            2. Extract: `tar -xzvf Producers-Toolkit_Linux_latest.tar.gz`
-            3. Run: `./Producers-Toolkit`
+            1. ensure the dependency libxcb-cursor0 is installed (e.g., `sudo apt-get install libxcb-cursor0`)
+            2. Download Producers-Toolkit_Linux_latest.tar.gz
+            3. Extract: `tar -xzvf Producers-Toolkit_Linux_latest.tar.gz`
+            4. Run: `./Producers-Toolkit`
           draft: false
           prerelease: false
 
