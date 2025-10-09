@@ -58,10 +58,10 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 # ------------------------
 DEFAULTS = {
     "words_per_page": 150,
-    "setup_minutes": 5,
+    "setup_minutes": 30,
     "setups_int": 3,
     "setups_ext": 5,
-    "default_move_duration": 10,
+    "default_move_duration": 0,
     "default_lunch_duration": 60,
     "default_start_time": "08:00"
 }
@@ -321,10 +321,10 @@ class ProducersToolkit(QMainWindow):
         bottom_row.addStretch()
 
         # Preview and Export controls in bottom right
-        #self.btn_preview = QPushButton("Preview")
-        #self.btn_preview.setFont(self._system_ui_font(12, bold=True))
-        #self.btn_preview.clicked.connect(self.open_preview_modal)
-        #bottom_row.addWidget(self.btn_preview)
+        self.btn_preview = QPushButton("Preview")
+        self.btn_preview.setFont(self._system_ui_font(12, bold=True))
+        self.btn_preview.clicked.connect(self.open_preview_modal)
+        bottom_row.addWidget(self.btn_preview)
 
         self.export_dropdown = QComboBox()
         self.export_dropdown.addItems(["Export CSV", "Export PDF", "Export Both"])
@@ -844,6 +844,7 @@ class ProducersToolkit(QMainWindow):
             data.append(rowd)
         return data
 
+    
     # ------------------------
     # Low-level export writer
     # ------------------------
@@ -861,34 +862,132 @@ class ProducersToolkit(QMainWindow):
                 csv_written = None
 
         if choice in ("Export PDF", "Export Both"):
-            try:
+         try:
+                from reportlab.lib.units import inch
+                
+                # Create custom styles
                 styles = getSampleStyleSheet()
-                styles.add(ParagraphStyle(name="Center12", alignment=1, fontSize=12, leading=15))
-                formatted = [[Paragraph(cell, styles["Center12"]) for cell in row] for row in data]
-                table = Table(formatted)
+                
+                # Header style
+                header_style = ParagraphStyle(
+                    name="HeaderStyle",
+                    parent=styles["Normal"],
+                    fontSize=10,
+                    leading=12,
+                    alignment=1,  # Center
+                    textColor=colors.HexColor("#1a1a1a"),
+                    fontName="Helvetica-Bold",
+                    spaceAfter=6
+                )
+                
+                # Normal cell style
+                cell_style = ParagraphStyle(
+                    name="CellStyle",
+                    parent=styles["Normal"],
+                    fontSize=9,
+                    leading=11,
+                    alignment=1,  # Center
+                    textColor=colors.HexColor("#333333"),
+                    fontName="Helvetica",
+                    wordWrap="CJK"
+                )
+                
+                # Summary row style (lunch, totals, wrap)
+                summary_style = ParagraphStyle(
+                    name="SummaryStyle",
+                    parent=styles["Normal"],
+                    fontSize=11,
+                    leading=14,
+                    alignment=1,  # Center
+                    textColor=colors.HexColor("#1a1a1a"),
+                    fontName="Helvetica-Bold"
+                )
+                
+                # Format data with appropriate styles
+                formatted = []
+                for row_idx, row in enumerate(data):
+                    formatted_row = []
+                    is_header = (row_idx == 0)
+                    is_summary = (row_idx > 0 and any(row[0].startswith(p) for p in ("LUNCH", "TOTAL SHOOT LENGTH", "ESTIMATED WRAP")))
+                    
+                    for cell in row:
+                        if is_header:
+                            formatted_row.append(Paragraph(str(cell), header_style))
+                        elif is_summary:
+                            formatted_row.append(Paragraph(str(cell), summary_style))
+                        else:
+                            formatted_row.append(Paragraph(str(cell), cell_style))
+                    formatted.append(formatted_row)
+                
+                # Define column widths (adjusted for better fit)
+                col_widths = [2.5*inch, 0.8*inch, 0.8*inch, 1.2*inch, 0.9*inch, 1.1*inch, 1.2*inch]
+                
+                # Create table with column widths
+                table = Table(formatted, colWidths=col_widths, repeatRows=1)
+                
+                # Enhanced table styling
                 ts = TableStyle([
-                    ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                    # Header row styling
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#7ca9d6")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, 0), 10),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 12),
+                    ("TOPPADDING", (0, 0), (-1, 0), 12),
+                    
+                    # All cells
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#bdc3c7")),
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                     ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 1), (-1, -1), 8),
+                    ("BOTTOMPADDING", (0, 1), (-1, -1), 8),
+                    
+                    # Alternating row colors for data rows
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8f9fa")]),
                 ])
+                
+                # Apply special styling for summary rows
                 for r, row in enumerate(data):
-                    if row[0].startswith("LUNCH"):
-                        ts.add("BACKGROUND", (0, r), (-1, r), colors.orange)
-                        ts.add("SPAN", (0, r), (-1, r))
-                    elif row[0].startswith("TOTAL SHOOT LENGTH"):
-                        ts.add("BACKGROUND", (0, r), (-1, r), colors.lightgreen)
-                        ts.add("SPAN", (0, r), (-1, r))
-                    elif row[0].startswith("ESTIMATED WRAP"):
-                        ts.add("BACKGROUND", (0, r), (-1, r), colors.lightblue)
-                        ts.add("SPAN", (0, r), (-1, r))
+                    if r > 0:  # Skip header
+                        if row[0].startswith("LUNCH"):
+                            ts.add("BACKGROUND", (0, r), (-1, r), colors.HexColor("#ff9800"))
+                            ts.add("TEXTCOLOR", (0, r), (-1, r), colors.white)
+                            ts.add("SPAN", (0, r), (-1, r))
+                            ts.add("TOPPADDING", (0, r), (-1, r), 10)
+                            ts.add("BOTTOMPADDING", (0, r), (-1, r), 10)
+                        elif row[0].startswith("TOTAL SHOOT LENGTH"):
+                            ts.add("BACKGROUND", (0, r), (-1, r), colors.HexColor("#4caf50"))
+                            ts.add("TEXTCOLOR", (0, r), (-1, r), colors.white)
+                            ts.add("SPAN", (0, r), (-1, r))
+                            ts.add("TOPPADDING", (0, r), (-1, r), 10)
+                            ts.add("BOTTOMPADDING", (0, r), (-1, r), 10)
+                        elif row[0].startswith("ESTIMATED WRAP"):
+                            ts.add("BACKGROUND", (0, r), (-1, r), colors.HexColor("#c15858"))
+                            ts.add("TEXTCOLOR", (0, r), (-1, r), colors.white)
+                            ts.add("SPAN", (0, r), (-1, r))
+                            ts.add("TOPPADDING", (0, r), (-1, r), 10)
+                            ts.add("BOTTOMPADDING", (0, r), (-1, r), 10)
+                
                 table.setStyle(ts)
-                SimpleDocTemplate(pdf_path, pagesize=letter).build([table])
+
+                  # Build PDF with margins
+                doc = SimpleDocTemplate(
+                    pdf_path,
+                    pagesize=letter,
+                    rightMargin=0.5*inch,
+                    leftMargin=0.5*inch,
+                    topMargin=0.75*inch,
+                    bottomMargin=0.75*inch
+                )
+                
+                doc.build([table])
                 pdf_written = pdf_path
-            except Exception:
+         except Exception as e:
+                print(f"PDF Export Error: {e}")
                 pdf_written = None
-
-        return csv_written, pdf_written
-
+                
     # ------------------------
     # Export flow
     # ------------------------
@@ -979,32 +1078,31 @@ class ProducersToolkit(QMainWindow):
         csv_layout.addWidget(csv_browser)
         tabs.addTab(csv_tab, "CSV Preview")
 
-        # PDF preview tab
+         # PDF Preview tab
         pdf_tab = QWidget()
         pdf_layout = QVBoxLayout(pdf_tab)
-
-        if QT_PDF_AVAILABLE:
+        if QT_PDF_AVAILABLE and os.path.exists(pdf_path):
             try:
-                self._pdf_doc = QPdfDocument()
-                self._pdf_doc.load(pdf_path)
-
-                self._pdf_view = QPdfView()
-                self._pdf_view.setDocument(self._pdf_doc)
-                self._pdf_view.setZoomMode(QPdfView.ZoomMode.FitInView)
-                pdf_layout.addWidget(self._pdf_view)
+                doc = QPdfDocument(dlg)
+                doc.load(pdf_path)
+                view = QPdfView(pdf_tab)
+                view.setDocument(doc)
+                try:
+                    view.setZoomMode(QPdfView.ZoomMode.FitInView)
+                except Exception:
+                    pass
+                pdf_layout.addWidget(view)
+                self._preview_pdf_doc = doc
+                self._preview_pdf_view = view
             except Exception as e:
-                fallback = QLabel(f"PDF Preview unavailable: {e}")
-                fallback.setFont(self._system_ui_font(12))
-                pdf_layout.addWidget(fallback)
+                lbl = QLabel(f"PDF preview error: {e}")
+                lbl.setFont(self._system_ui_font(12))
+                pdf_layout.addWidget(lbl)
         else:
-            fallback = QLabel(
-                "QtPDF module not available.\n"
-                "Install PyQt6-QtPdf and PyQt6-QtPdfWidgets for live PDF preview."
-            )
-            fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            fallback.setFont(self._system_ui_font(12, italic=True))
-            pdf_layout.addWidget(fallback)
-
+            lbl = QLabel("QtPDF not available — install PyQt6-QtPdf.")
+            lbl.setFont(self._system_ui_font(12))
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            pdf_layout.addWidget(lbl)
         tabs.addTab(pdf_tab, "PDF Preview")
 
         # Bottom buttons
