@@ -1,7 +1,7 @@
 # ------------------------------------------------------------
-# Producers-Toolkit_v0.20.4c-release.py
+# Producers-Toolkit_v0.20.4g-release.py
 # ------------------------------------------------------------
-# Version: v0.20.4c-release
+# Version: v0.20.4g-release
 #
 # Requirements:
 #      Python 3.12+
@@ -79,12 +79,12 @@ SETTINGS_FILE = "settings.json"
 # ------------------------------------------------------------
 class ProducersToolkit(QMainWindow):
     """
-    Main application window for Producer's Toolkit v0.20.4c-release.
+    Main application window for Producer's Toolkit v0.20.4g-release.
     """
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Producer's Toolkit v0.20.4c-release")
+        self.setWindowTitle("Producer's Toolkit v0.20.4g-release")
         self.resize(1400, 900)
 
         # Internal application state
@@ -958,7 +958,7 @@ class ProducersToolkit(QMainWindow):
                             ts.add("TOPPADDING", (0, r), (-1, r), 10)
                             ts.add("BOTTOMPADDING", (0, r), (-1, r), 10)
                         elif row[0].startswith("TOTAL SHOOT LENGTH"):
-                            ts.add("BACKGROUND", (0, r), (-1, r), colors.HexColor("#4caf50"))
+                            ts.add("BACKGROUND", (0, r), (-1, r), colors.HexColor("#4gaf50"))
                             ts.add("TEXTCOLOR", (0, r), (-1, r), colors.white)
                             ts.add("SPAN", (0, r), (-1, r))
                             ts.add("TOPPADDING", (0, r), (-1, r), 10)
