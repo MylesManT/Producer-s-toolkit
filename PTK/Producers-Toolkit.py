@@ -65,7 +65,7 @@ DEFAULTS = {
     "default_lunch_duration": 60,
     "default_start_time": "08:00"
 }
-
+# ribbon header styling
 FADE_DURATION_MS = 500
 CARD_BG = "#f8f9fb"
 CARD_PADDING = 6
